@@ -58,7 +58,8 @@ model ProductVariant {
   size         String?  // e.g. "XS", "S", "M", "L", "XL", "XXL", "Free Size"
   color        String?  // e.g. "Black", "White", "Navy"
   fabric       String?  // e.g. "Cotton", "Polyester", "Linen"
-  price        Decimal  @db.Decimal(10, 2)
+  costPrice    Decimal  @db.Decimal(10, 2) @default(0)  // Cost to buy from supplier
+  price        Decimal  @db.Decimal(10, 2)              // Selling price to customer
   currentStock Int      @default(0)
   lowStockAt   Int      @default(5)
   createdAt    DateTime @default(now())

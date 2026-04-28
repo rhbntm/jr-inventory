@@ -72,7 +72,8 @@ export default function QuickStockPage() {
       fabric: variant.fabric,
       currentStock: variant.currentStock,
       lowStockAt: variant.lowStockAt,
-      price: variant.price,
+      costPrice: Number((variant as any).costPrice ?? 0),
+      price: Number(variant.price),
       searchText: `${product.name} ${variant.sku ?? ""} ${variant.size ?? ""} ${variant.color ?? ""} ${variant.fabric ?? ""}`.toLowerCase(),
     }))
   ) ?? [];
@@ -247,6 +248,31 @@ export default function QuickStockPage() {
                   LOW STOCK
                 </Badge>
               )}
+              {/* Pricing Info */}
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-muted-foreground text-xs">Cost</p>
+                    <p className="font-medium">{selectedVariant.costPrice.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Sell</p>
+                    <p className="font-medium">{selectedVariant.price.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Profit</p>
+                    <p className={cn(
+                      "font-medium",
+                      selectedVariant.price - selectedVariant.costPrice >= 0 ? "text-green-600" : "text-destructive"
+                    )}>
+                      {(selectedVariant.price - selectedVariant.costPrice).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 text-right">
+                  Margin: {((selectedVariant.price - selectedVariant.costPrice) / selectedVariant.price * 100).toFixed(1)}%
+                </p>
+              </div>
             </div>
           )}
 

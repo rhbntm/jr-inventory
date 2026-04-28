@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Params }) {
         ...(body.size !== undefined && { size: body.size?.trim() ?? null }),
         ...(body.color !== undefined && { color: body.color?.trim() ?? null }),
         ...(body.fabric !== undefined && { fabric: body.fabric?.trim() ?? null }),
+        ...(body.costPrice !== undefined && { costPrice: body.costPrice }),
         ...(body.price !== undefined && { price: body.price }),
         ...(body.lowStockAt !== undefined && { lowStockAt: body.lowStockAt }),
       },

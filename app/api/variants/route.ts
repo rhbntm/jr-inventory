@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const body: CreateVariantInput = await req.json();
     if (!body.productId) return NextResponse.json({ error: "productId is required" }, { status: 400 });
     if (body.price === undefined || body.price < 0) return NextResponse.json({ error: "price must be non-negative" }, { status: 400 });
+    if (body.costPrice !== undefined && body.costPrice < 0) return NextResponse.json({ error: "costPrice must be non-negative" }, { status: 400 });
 
     const variant = await db.productVariant.create({
       data: {
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
         size: body.size?.trim() ?? null,
         color: body.color?.trim() ?? null,
         fabric: body.fabric?.trim() ?? null,
+        costPrice: body.costPrice ?? 0,
         price: body.price,
         lowStockAt: body.lowStockAt ?? 5,
         currentStock: 0,

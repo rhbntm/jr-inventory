@@ -50,6 +50,7 @@ export default function ProductDetailPage() {
   const [size, setSize] = useState("");
   const [color, setColor] = useState("");
   const [fabric, setFabric] = useState("");
+  const [costPrice, setCostPrice] = useState("");
   const [price, setPrice] = useState("");
   const [lowStockAt, setLowStockAt] = useState("10");
   const [currentStock, setCurrentStock] = useState("0");
@@ -90,12 +91,13 @@ export default function ProductDetailPage() {
         size: size.trim() || undefined,
         color: color.trim() || undefined,
         fabric: fabric.trim() || undefined,
+        costPrice: costPrice ? parseFloat(costPrice) : 0,
         price: parseFloat(price),
         lowStockAt: parseInt(lowStockAt),
       });
       toast.success("Variant added");
       setShowVariantForm(false);
-      setSku(""); setSize(""); setColor(""); setFabric(""); setPrice(""); setLowStockAt("10");
+      setSku(""); setSize(""); setColor(""); setFabric(""); setCostPrice(""); setPrice(""); setLowStockAt("10");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add variant");
     }
@@ -198,7 +200,17 @@ export default function ProductDetailPage() {
                   <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="SKU" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Price *</Label>
+                  <Label>Cost Price (Buy)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Selling Price (Sell) *</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -229,6 +241,23 @@ export default function ProductDetailPage() {
                     required
                   />
                 </div>
+                {/* Profit Preview */}
+                {price && parseFloat(price) > 0 && (
+                  <div className="md:col-span-2 p-3 bg-muted rounded-md text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Profit per unit:</span>
+                      <span className={parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0) >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
+                        {(parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-muted-foreground">Margin:</span>
+                      <span className="text-muted-foreground">
+                        {((parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0)) / parseFloat(price) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="md:col-span-2 flex justify-end gap-2">
                   <Button type="submit" disabled={createVariant.isPending}>
                     {createVariant.isPending ? "Adding..." : "Add Variant"}
@@ -307,7 +336,26 @@ export default function ProductDetailPage() {
                     {variant.color && <Badge variant="outline">Color: {variant.color}</Badge>}
                     {variant.fabric && <Badge variant="outline">Fabric: {variant.fabric}</Badge>}
                   </div>
-                  <div className="flex items-center justify-between pt-2">
+                  {/* Pricing Info */}
+                  <div className="pt-2 border-t">
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Cost: </span>
+                        <span className="font-medium">{(Number((variant as any).costPrice) || 0).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Sell: </span>
+                        <span className="font-medium">{Number(variant.price).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Profit: </span>
+                        <span className={Number(variant.price) - (Number((variant as any).costPrice) || 0) >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
+                          {(Number(variant.price) - (Number((variant as any).costPrice) || 0)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
                     <div className="text-sm">
                       <span className="text-muted-foreground">Stock: </span>
                       <span className="font-medium">{variant.currentStock}</span>

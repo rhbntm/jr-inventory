@@ -38,7 +38,8 @@ export type CreateVariantInput = {
   size?: string;
   color?: string;
   fabric?: string;
-  price: number;
+  costPrice?: number;  // Cost to buy from supplier
+  price: number;       // Selling price to customer
   lowStockAt?: number;
 };
 

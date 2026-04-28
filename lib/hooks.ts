@@ -120,6 +120,14 @@ export function useUpdateVariant(id: string) {
   });
 }
 
+export function useDeleteVariant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/variants/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
+  });
+}
+
 // Movements
 type MovementsParams = {
   variantId?: string;
@@ -144,7 +152,49 @@ export function useCreateMovement() {
   return useMutation({
     mutationFn: (data: CreateMovementInput) =>
       apiFetch<MovementWithDetails>("/api/movements", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => {
+    onMutate: async (newMovement) => {
+      // Cancel outgoing refetches
+      await qc.cancelQueries({ queryKey: ["products"] });
+      await qc.cancelQueries({ queryKey: ["movements"] });
+      await qc.cancelQueries({ queryKey: queryKeys.dashboard });
+
+      // Snapshot previous values
+      const previousProducts = qc.getQueryData<PaginatedResponse<ProductWithVariants>>(["products"]);
+      const previousMovements = qc.getQueryData<PaginatedResponse<MovementWithDetails>>(["movements"]);
+      const previousDashboard = qc.getQueryData<{ stats: DashboardStats; lowStockItems: LowStockItem[] }>(queryKeys.dashboard);
+
+      // Optimistically update products stock
+      if (previousProducts) {
+        const delta = newMovement.type === "IN" ? newMovement.quantity : -newMovement.quantity;
+        qc.setQueryData(["products"], {
+          ...previousProducts,
+          data: previousProducts.data.map((product) => ({
+            ...product,
+            variants: product.variants.map((variant) =>
+              variant.id === newMovement.variantId
+                ? { ...variant, currentStock: Math.max(0, variant.currentStock + delta) }
+                : variant
+            ),
+          })),
+        });
+      }
+
+      return { previousProducts, previousMovements, previousDashboard };
+    },
+    onError: (_err, _newMovement, context) => {
+      // Rollback on error
+      if (context?.previousProducts) {
+        qc.setQueryData(["products"], context.previousProducts);
+      }
+      if (context?.previousMovements) {
+        qc.setQueryData(["movements"], context.previousMovements);
+      }
+      if (context?.previousDashboard) {
+        qc.setQueryData(queryKeys.dashboard, context.previousDashboard);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["movements"] });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard });

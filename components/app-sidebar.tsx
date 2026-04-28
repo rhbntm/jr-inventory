@@ -10,11 +10,13 @@ import {
   FolderTree,
   Download,
   Menu,
+  Zap,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/stock", label: "Quick Stock", icon: Zap },
   { href: "/products", label: "Products", icon: Package },
   { href: "/movements", label: "Movements", icon: ArrowLeftRight },
   { href: "/categories", label: "Categories", icon: FolderTree },

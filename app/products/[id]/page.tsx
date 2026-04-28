@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useProduct, useCreateVariant, useUpdateVariant } from "@/lib/hooks";
+import { useProduct, useCreateVariant, useUpdateVariant, useDeleteProduct, useDeleteVariant } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,12 +11,21 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   Plus,
   Package,
   Pencil,
   Save,
   X,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +35,12 @@ export default function ProductDetailPage() {
   const { data: product, isLoading } = useProduct(id);
   const createVariant = useCreateVariant();
   const updateVariant = useUpdateVariant("");
+  const deleteProduct = useDeleteProduct();
+  const deleteVariant = useDeleteVariant();
+
+  // Delete confirmation states
+  const [showDeleteProductDialog, setShowDeleteProductDialog] = useState(false);
+  const [variantToDelete, setVariantToDelete] = useState<string | null>(null);
 
   const [showVariantForm, setShowVariantForm] = useState(false);
   const [editingVariant, setEditingVariant] = useState<string | null>(null);
@@ -99,6 +114,28 @@ export default function ProductDetailPage() {
     }
   }
 
+  async function handleDeleteProduct() {
+    try {
+      await deleteProduct.mutateAsync(id);
+      toast.success("Product deleted");
+      router.push("/products");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete product");
+      setShowDeleteProductDialog(false);
+    }
+  }
+
+  async function handleDeleteVariant(variantId: string) {
+    try {
+      await deleteVariant.mutateAsync(variantId);
+      toast.success("Variant deleted");
+      setVariantToDelete(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete variant");
+      setVariantToDelete(null);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-4">
@@ -107,7 +144,17 @@ export default function ProductDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <h1 className="text-3xl font-bold tracking-tight">{product.name}</h1>
+        <h1 className="text-3xl font-bold tracking-tight flex-1">{product.name}</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+          onClick={() => setShowDeleteProductDialog(true)}
+          disabled={deleteProduct.isPending}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete
+        </Button>
       </div>
 
       {/* Product Info */}
@@ -227,18 +274,29 @@ export default function ProductDetailPage() {
                           </Button>
                         </>
                       ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setEditingVariant(variant.id);
-                            setEditPrice(String(variant.price));
-                            setEditLowStock(String(variant.lowStockAt));
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              setEditingVariant(variant.id);
+                              setEditPrice(String(variant.price));
+                              setEditLowStock(String(variant.lowStockAt));
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => setVariantToDelete(variant.id)}
+                            disabled={deleteVariant.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -286,6 +344,72 @@ export default function ProductDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Product Confirmation Dialog */}
+      <Dialog open={showDeleteProductDialog} onOpenChange={setShowDeleteProductDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Product</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{product.name}</strong>? This action cannot be undone.
+              {product.variants.length > 0 && (
+                <p className="mt-2 text-destructive">
+                  This will also delete {product.variants.length} variant(s).
+                </p>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteProductDialog(false)}
+              disabled={deleteProduct.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProduct}
+              disabled={deleteProduct.isPending}
+            >
+              {deleteProduct.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Variant Confirmation Dialog */}
+      <Dialog open={!!variantToDelete} onOpenChange={() => setVariantToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Variant</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this variant? This action cannot be undone.
+              {variantToDelete && (
+                <p className="mt-2 text-muted-foreground">
+                  SKU: {product.variants.find(v => v.id === variantToDelete)?.sku ?? "No SKU"}
+                </p>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setVariantToDelete(null)}
+              disabled={deleteVariant.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => variantToDelete && handleDeleteVariant(variantToDelete)}
+              disabled={deleteVariant.isPending}
+            >
+              {deleteVariant.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

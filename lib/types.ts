@@ -28,16 +28,16 @@ export type MovementWithDetails = Prisma.StockMovementGetPayload<{
 
 export type CreateProductInput = {
   name: string;
-  description?: string;
-  categoryId?: string;
+  description?: string | null;
+  categoryId?: string | null;
 };
 
 export type CreateVariantInput = {
   productId: string;
-  sku?: string;
-  size?: string;
-  color?: string;
-  fabric?: string;
+  sku?: string | null;
+  size?: string | null;
+  color?: string | null;
+  fabric?: string | null;
   costPrice?: number;  // Cost to buy from supplier
   price: number;       // Selling price to customer
   lowStockAt?: number;
@@ -47,7 +47,7 @@ export type CreateMovementInput = {
   variantId: string;
   type: "IN" | "OUT" | "ADJUSTMENT";
   quantity: number;
-  note?: string;
+  note?: string | null;
 };
 
 export type DashboardStats = {
@@ -62,6 +62,31 @@ export type DashboardStats = {
   totalInventoryRevenue: number;
   totalProfitPotential: number;
   averageMarginPercent: number;
+  movementTrend: {
+    name: string;
+    in: number;
+    out: number;
+  }[];
+  marginDistribution: {
+    name: string;
+    value: number;
+    count: number;
+  }[];
+  topPerformers: {
+    id: string;
+    name: string;
+    sku: string | null;
+    profit: number;
+    salesCount: number;
+    currentStock: number;
+  }[];
+  slowMovingItems: {
+    id: string;
+    name: string;
+    sku: string | null;
+    currentStock: number;
+    daysSinceLastMovement: number | null;
+  }[];
 };
 
 export type LowStockItem = {

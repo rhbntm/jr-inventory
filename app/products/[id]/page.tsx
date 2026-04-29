@@ -99,7 +99,7 @@ export default function ProductDetailPage() {
 
     const result = variantSchema.safeParse(input);
     if (!result.success) {
-      toast.error(result.error.errors[0].message);
+      toast.error(result.error.issues[0].message);
       return;
     }
 
@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
 
     const result = variantSchema.partial().safeParse(input);
     if (!result.success) {
-      toast.error(result.error.errors[0].message);
+      toast.error(result.error.issues[0].message);
       return;
     }
 

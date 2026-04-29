@@ -29,6 +29,7 @@ import {
   BarChart3,
   Download,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
 
@@ -85,40 +86,25 @@ export default function AnalyticsPage() {
 
   const stats = data?.stats;
 
-  // Mock margin distribution data (Phase 2 would calculate this from real data)
-  const marginDistribution = [
-    { name: "< 10%", value: 15, count: 12 },
-    { name: "10-20%", value: 25, count: 18 },
-    { name: "20-30%", value: 30, count: 22 },
-    { name: "30-50%", value: 20, count: 15 },
-    { name: "> 50%", value: 10, count: 8 },
-  ];
+  const marginDistribution = stats?.marginDistribution ?? [];
 
-  // Mock movement trend data (Phase 3 would fetch this)
-  const movementTrend = [
-    { name: "Week 1", in: 45, out: 38 },
-    { name: "Week 2", in: 52, out: 42 },
-    { name: "Week 3", in: 38, out: 55 },
-    { name: "Week 4", in: 48, out: 40 },
-  ];
+  const movementTrend = stats?.movementTrend ?? [];
 
-  const handleExport = () => {
-    const exportData = {
-      inventoryValuation: {
-        totalCost: stats?.totalInventoryCost,
-        totalRevenue: stats?.totalInventoryRevenue,
-        totalProfit: stats?.totalProfitPotential,
-        averageMargin: stats?.averageMarginPercent,
-      },
-      generatedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analytics-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async () => {
+    try {
+      const res = await fetch("/api/export");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `inventory-report-${new Date().toISOString().split("T")[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Excel report exported");
+    } catch (err) {
+      toast.error("Failed to export report");
+    }
   };
 
   return (
@@ -372,31 +358,77 @@ export default function AnalyticsPage() {
 
       {/* Phase 2 & 3 Coming Soon Cards */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-dashed">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-muted-foreground flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-green-600">
               <TrendingUp className="h-5 w-5" />
-              Top Performing Products
+              Top Profit Potential
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Coming in Phase 2: Ranking of most profitable products by total profit potential.
-            </p>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : stats?.topPerformers && stats.topPerformers.length > 0 ? (
+              <div className="space-y-4">
+                {stats.topPerformers.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium leading-none">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.sku ?? "No SKU"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">₱{item.profit.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{item.currentStock} in stock</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="border-dashed">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-muted-foreground flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-amber-600">
               <TrendingDown className="h-5 w-5" />
               Slow Moving Stock
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Coming in Phase 3: Identify products with no movement in the last 60/90 days.
-            </p>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : stats?.slowMovingItems && stats.slowMovingItems.length > 0 ? (
+              <div className="space-y-4">
+                {stats.slowMovingItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium leading-none">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.sku ?? "No SKU"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{item.currentStock} units</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.daysSinceLastMovement === null 
+                          ? "No sales history" 
+                          : `${item.daysSinceLastMovement} days since last sale`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No slow moving items found</p>
+            )}
           </CardContent>
         </Card>
       </div>

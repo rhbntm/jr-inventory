@@ -71,6 +71,144 @@ export async function GET() {
         ? (weightedMarginSum / totalStockForMargin) * 100
         : 0;
 
+    // Calculate movement trend (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const trends = await db.$queryRaw<
+      Array<{
+        date: string;
+        type: string;
+        total: number;
+      }>
+    >`
+      SELECT
+        TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
+        "type",
+        SUM("quantity") as "total"
+      FROM "stock_movements"
+      WHERE "createdAt" >= ${sevenDaysAgo}
+      GROUP BY "date", "type"
+      ORDER BY "date" ASC
+    `;
+
+    // Format trends for Recharts
+    const trendMap = new Map<string, { name: string; in: number; out: number }>();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sevenDaysAgo);
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toISOString().split("T")[0];
+      const name = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      trendMap.set(dateStr, { name, in: 0, out: 0 });
+    }
+
+    trends.forEach((t) => {
+      const entry = trendMap.get(t.date);
+      if (entry) {
+        if (t.type === "IN") entry.in = Number(t.total);
+        if (t.type === "OUT") entry.out = Number(t.total);
+      }
+    });
+
+    const movementTrend = Array.from(trendMap.values());
+
+    // Calculate margin distribution
+    const margins = await db.$queryRaw<
+      Array<{
+        margin_percent: number;
+      }>
+    >`
+      SELECT
+        CASE
+          WHEN price > 0 THEN ((price - "costPrice") / price) * 100
+          ELSE 0
+        END as "margin_percent"
+      FROM "product_variants"
+      WHERE "currentStock" > 0
+    `;
+
+    const distribution = [
+      { name: "< 10%", value: 0, count: 0 },
+      { name: "10-20%", value: 0, count: 0 },
+      { name: "20-30%", value: 0, count: 0 },
+      { name: "30-50%", value: 0, count: 0 },
+      { name: "> 50%", value: 0, count: 0 },
+    ];
+
+    margins.forEach((m) => {
+      const p = Number(m.margin_percent);
+      let idx = 0;
+      if (p < 10) idx = 0;
+      else if (p < 20) idx = 1;
+      else if (p < 30) idx = 2;
+      else if (p < 50) idx = 3;
+      else idx = 4;
+      distribution[idx].count++;
+    });
+
+    const totalWithStock = margins.length;
+    if (totalWithStock > 0) {
+      distribution.forEach((d) => {
+        d.value = Math.round((d.count / totalWithStock) * 100);
+      });
+    }
+
+    // Calculate top performers by profit potential
+    const topPerformers = await db.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        sku: string | null;
+        profit: number;
+        currentStock: number;
+      }>
+    >`
+      SELECT
+        v.id,
+        p.name,
+        v.sku,
+        (v."currentStock" * (v.price - v."costPrice")) as "profit",
+        v."currentStock"
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" > 0
+      ORDER BY "profit" DESC
+      LIMIT 5
+    `;
+
+    // Calculate slow moving items (Variants with stock but no OUT movements in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const slowMovingItemsData = await db.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        sku: string | null;
+        currentStock: number;
+        last_out: string | null;
+      }>
+    >`
+      SELECT
+        v.id,
+        p.name,
+        v.sku,
+        v."currentStock",
+        (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM "stock_movements" m
+        WHERE m."variantId" = v.id
+        AND m."type" = 'OUT'
+        AND m."createdAt" >= ${thirtyDaysAgo}
+      )
+      ORDER BY v."currentStock" DESC
+      LIMIT 5
+    `;
+
     const [totalProducts, totalVariants, todayIn, todayOut, recentMovements] =
       await db.$transaction([
         db.product.count(),
@@ -102,6 +240,26 @@ export async function GET() {
         totalInventoryRevenue: Number(valuation.totalRevenue),
         totalProfitPotential: Number(valuation.totalProfit),
         averageMarginPercent: Math.round(averageMarginPercent * 100) / 100,
+        movementTrend,
+        marginDistribution: distribution,
+        topPerformers: topPerformers.map((tp) => ({
+          ...tp,
+          profit: Number(tp.profit),
+          salesCount: 0,
+        })),
+        slowMovingItems: slowMovingItemsData.map((item) => {
+          const lastOut = item.last_out ? new Date(item.last_out) : null;
+          const diffDays = lastOut
+            ? Math.floor((new Date().getTime() - lastOut.getTime()) / (1000 * 3600 * 24))
+            : null;
+          return {
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            currentStock: item.currentStock,
+            daysSinceLastMovement: diffDays,
+          };
+        }),
       },
       lowStockItems: lowStockVariants.map((v) => ({
         variantId: v.id,

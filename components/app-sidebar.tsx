@@ -25,7 +25,7 @@ const navItems = [
   { href: "/export", label: "Export", icon: Download },
 ];
 
-function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: typeof LayoutDashboard }) {
+function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: any }) {
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(`${href}/`);
 

@@ -15,7 +15,18 @@ import {
   TrendingUp,
   Wallet,
   Percent,
+  TrendingDown,
+  BarChart3,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 function StatCard({
   title,
@@ -25,11 +36,11 @@ function StatCard({
 }: {
   title: string;
   value: number | string;
-  icon: typeof Package;
+  icon: any;
   loading: boolean;
 }) {
   return (
-    <Card>
+    <Card className="overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-1 bg-linear-to-br from-background to-muted/30">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -38,7 +49,7 @@ function StatCard({
         {loading ? (
           <Skeleton className="h-8 w-20" />
         ) : (
-          <div className="text-2xl font-bold">{value}</div>
+          <div className="text-2xl font-bold tracking-tight">{value}</div>
         )}
       </CardContent>
     </Card>
@@ -110,6 +121,60 @@ export default function DashboardPage() {
           loading={isLoading}
         />
       </div>
+
+      {/* Movement Trend Chart */}
+      <Card className="col-span-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            Stock Movement Trend (Last 7 Days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-[200px] w-full" />
+          ) : (
+            <div className="h-[200px] w-full min-h-[200px]">
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={stats?.movementTrend ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                  />
+                  <YAxis 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    tickFormatter={(value) => `${value}`}
+                  />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="in"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Stock In"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="out"
+                    stroke="#ef4444"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Stock Out"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Low Stock Alerts */}
       <Card>

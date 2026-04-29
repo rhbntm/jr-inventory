@@ -40,7 +40,8 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Flatten all variants for search
   const allVariants = productsData?.data.flatMap((product) =>
@@ -69,12 +70,14 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
     }
     setQuantity(1);
     setNote("");
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
 
     const input = {
       variantId: selectedVariantId,
@@ -85,19 +88,30 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
 
     const result = movementSchema.safeParse(input);
     if (!result.success) {
-      setError(result.error.errors[0].message);
+      const errors: Record<string, string> = {};
+      result.error.issues.forEach((issue) => {
+        const path = issue.path[0] as string;
+        if (path && !errors[path]) {
+          errors[path] = issue.message;
+        }
+      });
+      setFieldErrors(errors);
       return;
     }
 
     try {
       await createMovement.mutateAsync(result.data);
-
       toast.success(`${type === "IN" ? "Stock In" : type === "OUT" ? "Stock Out" : "Adjustment"} recorded: ${quantity} units`);
       resetForm();
       onSuccess?.();
-    } catch (err) {
+    } catch (err: any) {
       const message = err instanceof Error ? err.message : "Failed to record movement";
-      setError(message);
+      
+      if (message.toLowerCase().includes("insufficient")) {
+        setFieldErrors({ quantity: "Insufficient stock for this movement" });
+      } else {
+        setGeneralError(message);
+      }
       toast.error(message);
     }
   };
@@ -110,14 +124,14 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
       {/* Variant Selector */}
       {!preselectedVariantId && (
         <div className="space-y-2">
-          <Label>Product / Variant *</Label>
+          <Label className={fieldErrors.variantId ? "text-destructive" : ""}>Product / Variant *</Label>
           <Popover open={searchOpen} onOpenChange={setSearchOpen}>
             <PopoverTrigger>
               <Button
                 variant="outline"
                 role="combobox"
                 aria-expanded={searchOpen}
-                className="w-full justify-between h-12 text-base"
+                className={cn("w-full justify-between h-12 text-base", fieldErrors.variantId && "border-destructive focus-visible:ring-destructive")}
                 disabled={productsLoading}
               >
                 {selectedVariant ? (
@@ -173,6 +187,7 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
               </Command>
             </PopoverContent>
           </Popover>
+          {fieldErrors.variantId && <p className="text-xs text-destructive font-medium">{fieldErrors.variantId}</p>}
         </div>
       )}
 
@@ -238,15 +253,19 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
 
       {/* Quantity */}
       <div className="space-y-2">
-        <Label htmlFor="quantity">Quantity *</Label>
+        <Label htmlFor="quantity" className={fieldErrors.quantity ? "text-destructive" : ""}>Quantity *</Label>
         <Input
           id="quantity"
           type="number"
           min={1}
           value={quantity}
-          onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 0))}
-          className="h-12 text-lg"
+          onChange={(e) => {
+            setQuantity(Math.max(1, parseInt(e.target.value) || 0));
+            if (fieldErrors.quantity) setFieldErrors({ ...fieldErrors, quantity: "" });
+          }}
+          className={cn("h-12 text-lg", fieldErrors.quantity && "border-destructive focus-visible:ring-destructive")}
         />
+        {fieldErrors.quantity && <p className="text-xs text-destructive font-medium">{fieldErrors.quantity}</p>}
       </div>
 
       {/* Note */}
@@ -262,9 +281,9 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
       </div>
 
       {/* Error Message */}
-      {error && (
+      {generalError && (
         <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-          {error}
+          {generalError}
         </div>
       )}
 

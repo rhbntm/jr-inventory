@@ -11,6 +11,7 @@ import type {
   DashboardStats,
   LowStockItem,
 } from "./types";
+import type { ProductVariant } from "@prisma/client";
 
 export const queryKeys = {
   dashboard: ["dashboard"] as const,
@@ -115,8 +116,16 @@ export function useUpdateVariant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateVariantInput> }) =>
-      apiFetch(`/api/variants/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
+      apiFetch<ProductVariant & { productId: string }>(`/api/variants/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      if (data.productId) {
+        qc.invalidateQueries({ queryKey: queryKeys.product(data.productId) });
+      }
+    },
   });
 }
 
@@ -124,7 +133,12 @@ export function useDeleteVariant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiFetch(`/api/variants/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      // Note: We don't have the productId here easily unless we pass it to the hook,
+      // but invalidating "products" and all "product" queries is safer.
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 }
 

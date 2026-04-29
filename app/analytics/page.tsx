@@ -178,6 +178,47 @@ export default function AnalyticsPage() {
         />
       </div>
 
+      {/* Today's Sales Performance */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="bg-primary/5 border-primary/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              Today's Actual Revenue
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-10 w-32" />
+            ) : (
+              <div className="text-3xl font-bold">₱{(stats?.todayRevenue ?? 0).toLocaleString()}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Based on {stats?.todayMovementsOut ?? 0} items sold today
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-green-50 border-green-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-green-700">
+              <TrendingUp className="h-4 w-4" />
+              Today's Actual Profit
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-10 w-32" />
+            ) : (
+              <div className="text-3xl font-bold text-green-700">₱{(stats?.todayProfit ?? 0).toLocaleString()}</div>
+            )}
+            <p className="text-xs text-green-600/70 mt-1">
+              Net profit after product costs
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts Row 1 */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Margin Distribution */}

@@ -60,6 +60,7 @@ model ProductVariant {
   fabric       String?  // e.g. "Cotton", "Polyester", "Linen"
   costPrice    Decimal  @db.Decimal(10, 2) @default(0)  // Cost to buy from supplier
   price        Decimal  @db.Decimal(10, 2)              // Selling price to customer
+  salePrice    Decimal? @db.Decimal(10, 2)              // Promotional price
   currentStock Int      @default(0)
   lowStockAt   Int      @default(5)
   createdAt    DateTime @default(now())
@@ -77,6 +78,7 @@ model StockMovement {
   variantId String
   type      MovementType
   quantity  Int
+  priceAtMovement Decimal?     @db.Decimal(10, 2)
   note      String?
   userId    String?
   createdAt DateTime     @default(now())

@@ -34,6 +34,9 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
     categoryId: undefined,
   });
 
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const isPending = createProduct.isPending || updateProduct.isPending;
+
   // Initialize form when editing
   useEffect(() => {
     if (product) {
@@ -47,10 +50,19 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
 
     const result = productSchema.safeParse(formData);
     if (!result.success) {
-      toast.error(result.error.errors[0].message);
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach((issue) => {
+        const path = issue.path[0] as string;
+        if (path && !fieldErrors[path]) {
+          fieldErrors[path] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast.error("Please check the form for errors");
       return;
     }
 
@@ -70,33 +82,40 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         setFormData({ name: "", description: "", categoryId: undefined });
       }
       onSuccess?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save product");
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : "Failed to save product";
+      toast.error(message);
+      if (message.toLowerCase().includes("name")) {
+        setErrors({ name: "A product with this name already exists" });
+      }
     }
   };
-
-  const isPending = createProduct.isPending || updateProduct.isPending;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name">
+        <Label htmlFor="name" className={errors.name ? "text-destructive" : ""}>
           Product Name <span className="text-destructive">*</span>
         </Label>
         <Input
           id="name"
           value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          onChange={(e) => {
+            setFormData({ ...formData, name: e.target.value });
+            if (errors.name) setErrors({ ...errors, name: "" });
+          }}
           placeholder="Enter product name..."
           disabled={isPending}
+          className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
         />
+        {errors.name && <p className="text-xs text-destructive font-medium">{errors.name}</p>}
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea
           id="description"
-          value={formData.description}
+          value={formData.description ?? ""}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           placeholder="Enter product description..."
           rows={3}

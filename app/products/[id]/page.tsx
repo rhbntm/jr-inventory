@@ -29,6 +29,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { VariantForm } from "@/components/variant-form";
+import { ProductVariant } from "@prisma/client";
+import { cn } from "@/lib/utils";
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,21 +47,7 @@ export default function ProductDetailPage() {
   const [variantToDelete, setVariantToDelete] = useState<string | null>(null);
 
   const [showVariantForm, setShowVariantForm] = useState(false);
-  const [editingVariant, setEditingVariant] = useState<string | null>(null);
-
-  // New variant form state
-  const [sku, setSku] = useState("");
-  const [size, setSize] = useState("");
-  const [color, setColor] = useState("");
-  const [fabric, setFabric] = useState("");
-  const [costPrice, setCostPrice] = useState("");
-  const [price, setPrice] = useState("");
-  const [lowStockAt, setLowStockAt] = useState("10");
-  const [currentStock, setCurrentStock] = useState("0");
-
-  // Edit variant state
-  const [editPrice, setEditPrice] = useState("");
-  const [editLowStock, setEditLowStock] = useState("");
+  const [variantToEdit, setVariantToEdit] = useState<ProductVariant | null>(null);
 
   if (isLoading) {
     return (
@@ -83,59 +72,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  async function handleAddVariant(e: React.FormEvent) {
-    e.preventDefault();
-    
-    const input = {
-      productId: id,
-      sku: sku.trim() || undefined,
-      size: size.trim() || undefined,
-      color: color.trim() || undefined,
-      fabric: fabric.trim() || undefined,
-      costPrice: costPrice ? parseFloat(costPrice) : 0,
-      price: parseFloat(price),
-      lowStockAt: parseInt(lowStockAt),
-    };
-
-    const result = variantSchema.safeParse(input);
-    if (!result.success) {
-      toast.error(result.error.issues[0].message);
-      return;
-    }
-
-    try {
-      await createVariant.mutateAsync(result.data);
-      toast.success("Variant added");
-      setShowVariantForm(false);
-      setSku(""); setSize(""); setColor(""); setFabric(""); setCostPrice(""); setPrice(""); setLowStockAt("10");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add variant");
-    }
-  }
-
-  async function handleUpdateVariant(variantId: string) {
-    const input = {
-      price: editPrice ? parseFloat(editPrice) : undefined,
-      lowStockAt: editLowStock ? parseInt(editLowStock) : undefined,
-    };
-
-    const result = variantSchema.partial().safeParse(input);
-    if (!result.success) {
-      toast.error(result.error.issues[0].message);
-      return;
-    }
-
-    try {
-      await updateVariant.mutateAsync({
-        id: variantId,
-        data: result.data,
-      });
-      toast.success("Variant updated");
-      setEditingVariant(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update variant");
-    }
-  }
 
   async function handleDeleteProduct() {
     try {
@@ -215,76 +151,10 @@ export default function ProductDetailPage() {
         {showVariantForm && (
           <Card>
             <CardContent className="pt-6">
-              <form onSubmit={handleAddVariant} className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>SKU</Label>
-                  <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="SKU" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cost Price (Buy)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={costPrice}
-                    onChange={(e) => setCostPrice(e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Selling Price (Sell) *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Size</Label>
-                  <Input value={size} onChange={(e) => setSize(e.target.value)} placeholder="S, M, L..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Color</Label>
-                  <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="Red, Blue..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Fabric</Label>
-                  <Input value={fabric} onChange={(e) => setFabric(e.target.value)} placeholder="Cotton..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Low Stock Alert</Label>
-                  <Input
-                    type="number"
-                    value={lowStockAt}
-                    onChange={(e) => setLowStockAt(e.target.value)}
-                    required
-                  />
-                </div>
-                {/* Profit Preview */}
-                {price && parseFloat(price) > 0 && (
-                  <div className="md:col-span-2 p-3 bg-muted rounded-md text-sm">
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Profit per unit:</span>
-                      <span className={parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0) >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
-                        {(parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0)).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-muted-foreground">Margin:</span>
-                      <span className="text-muted-foreground">
-                        {((parseFloat(price) - (costPrice ? parseFloat(costPrice) : 0)) / parseFloat(price) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <div className="md:col-span-2 flex justify-end gap-2">
-                  <Button type="submit" disabled={createVariant.isPending}>
-                    {createVariant.isPending ? "Adding..." : "Add Variant"}
-                  </Button>
-                </div>
-              </form>
+              <VariantForm 
+                productId={id} 
+                onSuccess={() => setShowVariantForm(false)} 
+              />
             </CardContent>
           </Card>
         )}
@@ -304,50 +174,23 @@ export default function ProductDetailPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base">{variant.sku ?? "No SKU"}</CardTitle>
                     <div className="flex gap-2">
-                      {editingVariant === variant.id ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleUpdateVariant(variant.id)}
-                          >
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => setEditingVariant(null)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                              setEditingVariant(variant.id);
-                              setEditPrice(String(variant.price));
-                              setEditLowStock(String(variant.lowStockAt));
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => setVariantToDelete(variant.id)}
-                            disabled={deleteVariant.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setVariantToEdit(variant)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => setVariantToDelete(variant.id)}
+                        disabled={deleteVariant.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -362,17 +205,31 @@ export default function ProductDetailPage() {
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Cost: </span>
-                        <span className="font-medium">{(Number((variant as any).costPrice) || 0).toFixed(2)}</span>
+                        <span className="font-medium">₱{(Number((variant as any).costPrice) || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Sell: </span>
-                        <span className="font-medium">{Number(variant.price).toFixed(2)}</span>
+                        <span className={cn("font-medium", (variant as any).salePrice && "line-through text-muted-foreground text-xs")}>
+                          ₱{Number(variant.price).toFixed(2)}
+                        </span>
+                        {(variant as any).salePrice && (
+                          <div className="text-amber-600 font-bold">
+                            ₱{Number((variant as any).salePrice).toFixed(2)}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Profit: </span>
-                        <span className={Number(variant.price) - (Number((variant as any).costPrice) || 0) >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
-                          {(Number(variant.price) - (Number((variant as any).costPrice) || 0)).toFixed(2)}
-                        </span>
+                        {(() => {
+                          const currentPrice = (variant as any).salePrice ? Number((variant as any).salePrice) : Number(variant.price);
+                          const profit = currentPrice - (Number((variant as any).costPrice) || 0);
+                          return (
+                            <span className={profit >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
+                              ₱{profit.toFixed(2)}
+                              {(variant as any).salePrice && <span className="text-[10px] block text-amber-600">(on sale)</span>}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -386,27 +243,6 @@ export default function ProductDetailPage() {
                       <span className="font-medium">{variant.lowStockAt}</span>
                     </div>
                   </div>
-                  {editingVariant === variant.id && (
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Price</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={editPrice}
-                          onChange={(e) => setEditPrice(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Low Stock</Label>
-                        <Input
-                          type="number"
-                          value={editLowStock}
-                          onChange={(e) => setEditLowStock(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             ))}
@@ -477,6 +313,25 @@ export default function ProductDetailPage() {
               {deleteVariant.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Variant Dialog */}
+      <Dialog open={!!variantToEdit} onOpenChange={(open) => !open && setVariantToEdit(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Variant</DialogTitle>
+            <DialogDescription>
+              Update details for variant {variantToEdit?.sku ?? "without SKU"}.
+            </DialogDescription>
+          </DialogHeader>
+          {variantToEdit && (
+            <VariantForm
+              productId={id}
+              variant={variantToEdit}
+              onSuccess={() => setVariantToEdit(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

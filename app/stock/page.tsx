@@ -53,6 +53,7 @@ export default function QuickStockPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState<string>("");
+  const [priceOverride, setPriceOverride] = useState<number | "">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sessionMovements, setSessionMovements] = useState<SessionMovement[]>([]);
 
@@ -75,6 +76,7 @@ export default function QuickStockPage() {
       lowStockAt: variant.lowStockAt,
       costPrice: Number((variant as any).costPrice ?? 0),
       price: Number(variant.price),
+      salePrice: (variant as any).salePrice ? Number((variant as any).salePrice) : null,
       searchText: `${product.name} ${variant.sku ?? ""} ${variant.size ?? ""} ${variant.color ?? ""} ${variant.fabric ?? ""}`.toLowerCase(),
     }))
   ) ?? [];
@@ -85,6 +87,7 @@ export default function QuickStockPage() {
     setSelectedVariantId("");
     setQuantity(1);
     setNote("");
+    setPriceOverride("");
     // Focus back to search
     setTimeout(() => setSearchOpen(true), 100);
   }, []);
@@ -98,6 +101,7 @@ export default function QuickStockPage() {
       variantId: selectedVariantId,
       type,
       quantity,
+      priceAtMovement: priceOverride !== "" ? priceOverride : undefined,
       note: note.trim() || undefined,
     };
 
@@ -199,13 +203,21 @@ export default function QuickStockPage() {
                           value={variant.searchText}
                           onSelect={() => {
                             setSelectedVariantId(variant.id);
+                            setPriceOverride(variant.salePrice ?? variant.price);
                             setSearchOpen(false);
                             // Focus quantity after selection
                             setTimeout(() => quantityInputRef.current?.focus(), 100);
                           }}
                         >
                           <div className="flex flex-col items-start w-full">
-                            <span className="font-medium">{variant.productName}</span>
+                            <div className="flex items-center justify-between w-full">
+                              <span className="font-medium">{variant.productName}</span>
+                              {variant.salePrice && (
+                                <Badge variant="secondary" className="h-5 text-[10px] bg-amber-100 text-amber-700 border-amber-200">
+                                  SALE
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-sm text-muted-foreground">
                               {[variant.size, variant.color, variant.sku]
                                 .filter(Boolean)
@@ -257,26 +269,69 @@ export default function QuickStockPage() {
                 <div className="grid grid-cols-3 gap-2 text-sm">
                   <div>
                     <p className="text-muted-foreground text-xs">Cost</p>
-                    <p className="font-medium">{selectedVariant.costPrice.toFixed(2)}</p>
+                    <p className="font-medium">₱{selectedVariant.costPrice.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">Sell</p>
-                    <p className="font-medium">{selectedVariant.price.toFixed(2)}</p>
+                    <p className="text-muted-foreground text-xs">Normal Sell</p>
+                    <p className={cn("font-medium", selectedVariant.salePrice && "line-through text-muted-foreground")}>
+                      ₱{selectedVariant.price.toFixed(2)}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">Profit</p>
+                    <p className="text-muted-foreground text-xs">{selectedVariant.salePrice ? "Sale Price" : "Profit"}</p>
                     <p className={cn(
                       "font-medium",
-                      selectedVariant.price - selectedVariant.costPrice >= 0 ? "text-green-600" : "text-destructive"
+                      selectedVariant.salePrice 
+                        ? "text-amber-600 font-bold" 
+                        : (selectedVariant.price - selectedVariant.costPrice >= 0 ? "text-green-600" : "text-destructive")
                     )}>
-                      {(selectedVariant.price - selectedVariant.costPrice).toFixed(2)}
+                      {selectedVariant.salePrice 
+                        ? `₱${selectedVariant.salePrice.toFixed(2)}` 
+                        : `₱${(selectedVariant.price - selectedVariant.costPrice).toFixed(2)}`}
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-right">
-                  Margin: {((selectedVariant.price - selectedVariant.costPrice) / selectedVariant.price * 100).toFixed(1)}%
-                </p>
+                {selectedVariant.salePrice && (
+                  <p className="text-[10px] text-amber-600 mt-1 font-medium bg-amber-50 px-2 py-0.5 rounded inline-block">
+                    Active Sale: Save ₱{(selectedVariant.price - selectedVariant.salePrice).toFixed(2)}
+                  </p>
+                )}
               </div>
+            </div>
+          )}
+
+          {/* Pricing Override (NEW) */}
+          {selectedVariant && (
+            <div className="space-y-2 p-3 border rounded-lg bg-accent/30">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="priceAtMovement" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Unit Price for this Transaction
+                </Label>
+                {priceOverride !== (selectedVariant.salePrice ?? selectedVariant.price) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => setPriceOverride(selectedVariant.salePrice ?? selectedVariant.price)}
+                  >
+                    Reset to Default
+                  </Button>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₱</span>
+                <Input
+                  id="priceAtMovement"
+                  type="number"
+                  step="0.01"
+                  value={priceOverride}
+                  onChange={(e) => setPriceOverride(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                  className="pl-7 h-10 text-lg font-bold border-2 focus-visible:ring-primary"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                This will be recorded in history as the actual selling price.
+              </p>
             </div>
           )}
 

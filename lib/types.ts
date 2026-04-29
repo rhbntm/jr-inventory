@@ -39,7 +39,8 @@ export type CreateVariantInput = {
   color?: string | null;
   fabric?: string | null;
   costPrice?: number;  // Cost to buy from supplier
-  price: number;       // Selling price to customer
+  price: number;       // Normal selling price
+  salePrice?: number | null; // Optional promotional price
   lowStockAt?: number;
 };
 
@@ -47,6 +48,7 @@ export type CreateMovementInput = {
   variantId: string;
   type: "IN" | "OUT" | "ADJUSTMENT";
   quantity: number;
+  priceAtMovement?: number | null;
   note?: string | null;
 };
 
@@ -56,6 +58,8 @@ export type DashboardStats = {
   lowStockCount: number;
   todayMovementsIn: number;
   todayMovementsOut: number;
+  todayRevenue: number;
+  todayProfit: number;
   recentMovements: MovementWithDetails[];
   // Financial KPIs
   totalInventoryCost: number;

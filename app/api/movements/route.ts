@@ -57,10 +57,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { variantId, type, quantity, note } = result.data;
+    const { variantId, type, quantity, note, priceAtMovement } = result.data;
 
     const variant = await db.productVariant.findUnique({ where: { id: variantId } });
     if (!variant) return NextResponse.json({ error: "Variant not found" }, { status: 404 });
+
+    // Fallback price logic if priceAtMovement isn't explicitly provided
+    let finalPrice: number | null | undefined = priceAtMovement;
+    if (finalPrice === undefined || finalPrice === null) {
+      if (type === "OUT") {
+        // Use salePrice if active, otherwise normal price
+        finalPrice = variant.salePrice ? Number(variant.salePrice) : Number(variant.price);
+      } else {
+        finalPrice = Number(variant.price);
+      }
+    }
 
     // Prevent negative stock on OUT
     if (type === "OUT" && variant.currentStock < quantity) {
@@ -78,6 +89,7 @@ export async function POST(req: NextRequest) {
           variantId,
           type,
           quantity,
+          priceAtMovement: finalPrice,
           note: note || null,
           // userId: wire up from NextAuth session
         },

@@ -209,6 +209,22 @@ export async function GET() {
       LIMIT 5
     `;
 
+    // Calculate today's actual revenue and profit from movements
+    const todaySales = await db.$queryRaw<
+      Array<{
+        revenue: number;
+        profit: number;
+      }>
+    >`
+      SELECT
+        COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
+        COALESCE(SUM(m."quantity" * (m."priceAtMovement" - v."costPrice")), 0) as "profit"
+      FROM "stock_movements" m
+      JOIN "product_variants" v ON m."variantId" = v.id
+      WHERE m."type" = 'OUT'
+      AND m."createdAt" >= ${todayStart}
+    `;
+
     const [totalProducts, totalVariants, todayIn, todayOut, recentMovements] =
       await db.$transaction([
         db.product.count(),
@@ -235,6 +251,8 @@ export async function GET() {
         lowStockCount: lowStockVariants.length,
         todayMovementsIn: todayIn._sum.quantity ?? 0,
         todayMovementsOut: todayOut._sum.quantity ?? 0,
+        todayRevenue: Number(todaySales[0].revenue),
+        todayProfit: Number(todaySales[0].profit),
         recentMovements,
         totalInventoryCost: Number(valuation.totalCost),
         totalInventoryRevenue: Number(valuation.totalRevenue),

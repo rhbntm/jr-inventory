@@ -8,6 +8,7 @@ export const variantSchema = z.object({
   fabric: z.string().trim().nullable().optional(),
   costPrice: z.coerce.number().min(0, "Cost price must be non-negative"),
   price: z.coerce.number().min(0, "Selling price must be non-negative"),
+  salePrice: z.coerce.number().min(0, "Sale price must be non-negative").nullable().optional(),
   lowStockAt: z.coerce.number().int().min(0, "Low stock threshold must be non-negative").default(5),
 });
 
@@ -21,6 +22,7 @@ export const movementSchema = z.object({
   variantId: z.string().min(1, "Variant ID is required"),
   type: z.enum(["IN", "OUT", "ADJUSTMENT"]),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  priceAtMovement: z.coerce.number().min(0).nullable().optional(),
   note: z.string().trim().nullable().optional(),
 });
 

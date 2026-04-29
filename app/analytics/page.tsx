@@ -1,0 +1,405 @@
+"use client";
+
+import { useState } from "react";
+import { useDashboard } from "@/lib/hooks";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts";
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Package,
+  ArrowUpRight,
+  ArrowDownRight,
+  BarChart3,
+  Download,
+} from "lucide-react";
+
+const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+interface KPICardProps {
+  title: string;
+  value: string;
+  change?: string;
+  icon: typeof DollarSign;
+  trend?: "up" | "down" | "neutral";
+  loading: boolean;
+}
+
+function KPICard({ title, value, change, icon: Icon, trend, loading }: KPICardProps) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <Skeleton className="h-8 w-24" />
+        ) : (
+          <div className="space-y-1">
+            <div className="text-2xl font-bold">{value}</div>
+            {change && (
+              <div
+                className={`text-xs flex items-center gap-1 ${
+                  trend === "up"
+                    ? "text-green-600"
+                    : trend === "down"
+                    ? "text-red-600"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {trend === "up" ? (
+                  <ArrowUpRight className="h-3 w-3" />
+                ) : trend === "down" ? (
+                  <ArrowDownRight className="h-3 w-3" />
+                ) : null}
+                {change}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function AnalyticsPage() {
+  const { data, isLoading } = useDashboard();
+  const [timeRange, setTimeRange] = useState<"week" | "month">("month");
+
+  const stats = data?.stats;
+
+  // Mock margin distribution data (Phase 2 would calculate this from real data)
+  const marginDistribution = [
+    { name: "< 10%", value: 15, count: 12 },
+    { name: "10-20%", value: 25, count: 18 },
+    { name: "20-30%", value: 30, count: 22 },
+    { name: "30-50%", value: 20, count: 15 },
+    { name: "> 50%", value: 10, count: 8 },
+  ];
+
+  // Mock movement trend data (Phase 3 would fetch this)
+  const movementTrend = [
+    { name: "Week 1", in: 45, out: 38 },
+    { name: "Week 2", in: 52, out: 42 },
+    { name: "Week 3", in: 38, out: 55 },
+    { name: "Week 4", in: 48, out: 40 },
+  ];
+
+  const handleExport = () => {
+    const exportData = {
+      inventoryValuation: {
+        totalCost: stats?.totalInventoryCost,
+        totalRevenue: stats?.totalInventoryRevenue,
+        totalProfit: stats?.totalProfitPotential,
+        averageMargin: stats?.averageMarginPercent,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analytics-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground">Business intelligence and performance metrics</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-muted rounded-lg p-1">
+            <Button
+              variant={timeRange === "week" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setTimeRange("week")}
+            >
+              Week
+            </Button>
+            <Button
+              variant={timeRange === "month" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setTimeRange("month")}
+            >
+              Month
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KPICard
+          title="Inventory Value (Cost)"
+          value={`₱${(stats?.totalInventoryCost ?? 0).toLocaleString()}`}
+          icon={Package}
+          loading={isLoading}
+        />
+        <KPICard
+          title="Potential Revenue"
+          value={`₱${(stats?.totalInventoryRevenue ?? 0).toLocaleString()}`}
+          icon={DollarSign}
+          loading={isLoading}
+        />
+        <KPICard
+          title="Total Profit Potential"
+          value={`₱${(stats?.totalProfitPotential ?? 0).toLocaleString()}`}
+          change={`${stats?.averageMarginPercent ?? 0}% avg margin`}
+          icon={TrendingUp}
+          trend="up"
+          loading={isLoading}
+        />
+        <KPICard
+          title="Investment ROI"
+          value={
+            stats?.totalInventoryCost && stats?.totalInventoryCost > 0
+              ? `${(
+                  ((stats?.totalProfitPotential ?? 0) / stats?.totalInventoryCost) *
+                  100
+                ).toFixed(1)}%`
+              : "N/A"
+          }
+          change="Return on inventory cost"
+          icon={TrendingUp}
+          trend="up"
+          loading={isLoading}
+        />
+      </div>
+
+      {/* Charts Row 1 */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Margin Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Profit Margin Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-[250px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={marginDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value) => {
+                      if (typeof value !== "number") return ["", ""];
+                      return [
+                        `${value}% (${marginDistribution.find((d) => d.value === value)?.count ?? 0} items)`,
+                        "Percentage",
+                      ];
+                    }}
+                  />
+                  <Bar dataKey="value">
+                    {marginDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Distribution of products by profit margin brackets
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Stock Movement Trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Stock Movement Trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-[250px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={movementTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="in"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    name="Stock In"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="out"
+                    stroke="#ef4444"
+                    strokeWidth={2}
+                    name="Stock Out"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Weekly IN vs OUT movements
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Inventory Efficiency</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Cost per Variant</span>
+                  <span className="font-medium">
+                    ₱
+                    {stats?.totalVariants && stats?.totalVariants > 0
+                      ? (
+                          (stats?.totalInventoryCost ?? 0) / stats?.totalVariants
+                        ).toFixed(2)
+                      : "0.00"}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Revenue per Variant</span>
+                  <span className="font-medium">
+                    ₱
+                    {stats?.totalVariants && stats?.totalVariants > 0
+                      ? (
+                          (stats?.totalInventoryRevenue ?? 0) / stats?.totalVariants
+                        ).toFixed(2)
+                      : "0.00"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Risk Assessment</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Low Stock Items</span>
+                  <span className="font-medium text-amber-600">
+                    {stats?.lowStockCount ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Risk Percentage</span>
+                  <span className="font-medium">
+                    {stats?.totalVariants && stats?.totalVariants > 0
+                      ? (((stats?.lowStockCount ?? 0) / stats?.totalVariants) * 100).toFixed(1)
+                      : "0.0"}
+                    %
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Today's Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Items Received</span>
+                  <span className="font-medium text-green-600">
+                    +{stats?.todayMovementsIn ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Items Sold</span>
+                  <span className="font-medium text-blue-600">
+                    -{stats?.todayMovementsOut ?? 0}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Phase 2 & 3 Coming Soon Cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle className="text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Top Performing Products
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Coming in Phase 2: Ranking of most profitable products by total profit potential.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle className="text-muted-foreground flex items-center gap-2">
+              <TrendingDown className="h-5 w-5" />
+              Slow Moving Stock
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Coming in Phase 3: Identify products with no movement in the last 60/90 days.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -32,6 +32,45 @@ export async function GET() {
       LIMIT 20
     `;
 
+    // Calculate inventory valuation using raw SQL for multiplications
+    const inventoryValuation = await db.$queryRaw<
+      Array<{
+        totalCost: number;
+        totalRevenue: number;
+        totalProfit: number;
+        weightedMarginSum: number;
+        totalStockForMargin: number;
+      }>
+    >`
+      SELECT
+        COALESCE(SUM(v."currentStock" * v."costPrice"), 0) as "totalCost",
+        COALESCE(SUM(v."currentStock" * v.price), 0) as "totalRevenue",
+        COALESCE(SUM(v."currentStock" * (v.price - v."costPrice")), 0) as "totalProfit",
+        COALESCE(SUM(
+          CASE
+            WHEN v.price > 0 AND v."currentStock" > 0
+            THEN v."currentStock" * ((v.price - v."costPrice") / v.price)
+            ELSE 0
+          END
+        ), 0) as "weightedMarginSum",
+        COALESCE(SUM(
+          CASE
+            WHEN v.price > 0 AND v."currentStock" > 0
+            THEN v."currentStock"
+            ELSE 0
+          END
+        ), 0) as "totalStockForMargin"
+      FROM "product_variants" v
+    `;
+
+    const valuation = inventoryValuation[0];
+    const weightedMarginSum = Number(valuation.weightedMarginSum);
+    const totalStockForMargin = Number(valuation.totalStockForMargin);
+    const averageMarginPercent =
+      totalStockForMargin > 0
+        ? (weightedMarginSum / totalStockForMargin) * 100
+        : 0;
+
     const [totalProducts, totalVariants, todayIn, todayOut, recentMovements] =
       await db.$transaction([
         db.product.count(),
@@ -59,6 +98,10 @@ export async function GET() {
         todayMovementsIn: todayIn._sum.quantity ?? 0,
         todayMovementsOut: todayOut._sum.quantity ?? 0,
         recentMovements,
+        totalInventoryCost: Number(valuation.totalCost),
+        totalInventoryRevenue: Number(valuation.totalRevenue),
+        totalProfitPotential: Number(valuation.totalProfit),
+        averageMarginPercent: Math.round(averageMarginPercent * 100) / 100,
       },
       lowStockItems: lowStockVariants.map((v) => ({
         variantId: v.id,

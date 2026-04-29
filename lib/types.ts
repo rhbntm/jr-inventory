@@ -57,6 +57,11 @@ export type DashboardStats = {
   todayMovementsIn: number;
   todayMovementsOut: number;
   recentMovements: MovementWithDetails[];
+  // Financial KPIs
+  totalInventoryCost: number;
+  totalInventoryRevenue: number;
+  totalProfitPotential: number;
+  averageMarginPercent: number;
 };
 
 export type LowStockItem = {

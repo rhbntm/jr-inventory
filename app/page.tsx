@@ -11,6 +11,10 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Activity,
+  DollarSign,
+  TrendingUp,
+  Wallet,
+  Percent,
 } from "lucide-react";
 
 function StatCard({
@@ -51,7 +55,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
 
-      {/* Stats */}
+      {/* Inventory Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Products"
@@ -75,6 +79,34 @@ export default function DashboardPage() {
           title="Today's Movements"
           value={`${stats?.todayMovementsIn ?? 0} / ${stats?.todayMovementsOut ?? 0}`}
           icon={Activity}
+          loading={isLoading}
+        />
+      </div>
+
+      {/* Financial KPIs */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Inventory Cost"
+          value={`₱${(stats?.totalInventoryCost ?? 0).toLocaleString()}`}
+          icon={Wallet}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Potential Revenue"
+          value={`₱${(stats?.totalInventoryRevenue ?? 0).toLocaleString()}`}
+          icon={DollarSign}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Profit Potential"
+          value={`₱${(stats?.totalProfitPotential ?? 0).toLocaleString()}`}
+          icon={TrendingUp}
+          loading={isLoading}
+        />
+        <StatCard
+          title="Avg Margin"
+          value={`${stats?.averageMarginPercent ?? 0}%`}
+          icon={Percent}
           loading={isLoading}
         />
       </div>

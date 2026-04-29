@@ -11,11 +11,13 @@ import {
   Download,
   Menu,
   Zap,
+  BarChart3,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/stock", label: "Quick Stock", icon: Zap },
   { href: "/products", label: "Products", icon: Package },
   { href: "/movements", label: "Movements", icon: ArrowLeftRight },

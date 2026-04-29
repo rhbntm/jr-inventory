@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProduct, useCreateVariant, useUpdateVariant, useDeleteProduct, useDeleteVariant } from "@/lib/hooks";
+import { variantSchema } from "@/lib/schemas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,7 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const { data: product, isLoading } = useProduct(id);
   const createVariant = useCreateVariant();
-  const updateVariant = useUpdateVariant("");
+  const updateVariant = useUpdateVariant();
   const deleteProduct = useDeleteProduct();
   const deleteVariant = useDeleteVariant();
 
@@ -84,17 +85,26 @@ export default function ProductDetailPage() {
 
   async function handleAddVariant(e: React.FormEvent) {
     e.preventDefault();
+    
+    const input = {
+      productId: id,
+      sku: sku.trim() || undefined,
+      size: size.trim() || undefined,
+      color: color.trim() || undefined,
+      fabric: fabric.trim() || undefined,
+      costPrice: costPrice ? parseFloat(costPrice) : 0,
+      price: parseFloat(price),
+      lowStockAt: parseInt(lowStockAt),
+    };
+
+    const result = variantSchema.safeParse(input);
+    if (!result.success) {
+      toast.error(result.error.errors[0].message);
+      return;
+    }
+
     try {
-      await createVariant.mutateAsync({
-        productId: id,
-        sku: sku.trim() || undefined,
-        size: size.trim() || undefined,
-        color: color.trim() || undefined,
-        fabric: fabric.trim() || undefined,
-        costPrice: costPrice ? parseFloat(costPrice) : 0,
-        price: parseFloat(price),
-        lowStockAt: parseInt(lowStockAt),
-      });
+      await createVariant.mutateAsync(result.data);
       toast.success("Variant added");
       setShowVariantForm(false);
       setSku(""); setSize(""); setColor(""); setFabric(""); setCostPrice(""); setPrice(""); setLowStockAt("10");
@@ -104,10 +114,21 @@ export default function ProductDetailPage() {
   }
 
   async function handleUpdateVariant(variantId: string) {
+    const input = {
+      price: editPrice ? parseFloat(editPrice) : undefined,
+      lowStockAt: editLowStock ? parseInt(editLowStock) : undefined,
+    };
+
+    const result = variantSchema.partial().safeParse(input);
+    if (!result.success) {
+      toast.error(result.error.errors[0].message);
+      return;
+    }
+
     try {
       await updateVariant.mutateAsync({
-        price: editPrice ? parseFloat(editPrice) : undefined,
-        lowStockAt: editLowStock ? parseInt(editLowStock) : undefined,
+        id: variantId,
+        data: result.data,
       });
       toast.success("Variant updated");
       setEditingVariant(null);
@@ -401,9 +422,9 @@ export default function ProductDetailPage() {
             <DialogDescription>
               Are you sure you want to delete <strong>{product.name}</strong>? This action cannot be undone.
               {product.variants.length > 0 && (
-                <p className="mt-2 text-destructive">
+                <span className="mt-2 block text-destructive">
                   This will also delete {product.variants.length} variant(s).
-                </p>
+                </span>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -434,9 +455,9 @@ export default function ProductDetailPage() {
             <DialogDescription>
               Are you sure you want to delete this variant? This action cannot be undone.
               {variantToDelete && (
-                <p className="mt-2 text-muted-foreground">
+                <span className="mt-2 block text-muted-foreground">
                   SKU: {product.variants.find(v => v.id === variantToDelete)?.sku ?? "No SKU"}
-                </p>
+                </span>
               )}
             </DialogDescription>
           </DialogHeader>

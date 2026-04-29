@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useCategories, useCreateProduct, useUpdateProduct } from "@/lib/hooks";
+import { productSchema } from "@/lib/schemas";
 import type { ProductWithVariants, CreateProductInput } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const isEditing = !!product;
   const { data: categories, isLoading: categoriesLoading } = useCategories();
   const createProduct = useCreateProduct();
-  const updateProduct = useUpdateProduct(product?.id ?? "");
+  const updateProduct = useUpdateProduct();
 
   const [formData, setFormData] = useState<CreateProductInput>({
     name: "",
@@ -47,25 +48,21 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim()) {
-      toast.error("Product name is required");
+    const result = productSchema.safeParse(formData);
+    if (!result.success) {
+      toast.error(result.error.errors[0].message);
       return;
     }
 
     try {
       if (isEditing) {
         await updateProduct.mutateAsync({
-          name: formData.name,
-          description: formData.description || undefined,
-          categoryId: formData.categoryId,
+          id: product.id,
+          data: result.data,
         });
         toast.success("Product updated successfully");
       } else {
-        await createProduct.mutateAsync({
-          name: formData.name,
-          description: formData.description || undefined,
-          categoryId: formData.categoryId,
-        });
+        await createProduct.mutateAsync(result.data);
         toast.success("Product created successfully");
       }
 

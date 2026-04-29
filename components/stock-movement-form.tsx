@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useProducts, useCreateMovement } from "@/lib/hooks";
+import { movementSchema } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,18 +76,21 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
     e.preventDefault();
     setError(null);
 
-    if (!selectedVariantId || quantity < 1) {
-      setError("Please select a variant and enter a valid quantity");
+    const input = {
+      variantId: selectedVariantId,
+      type,
+      quantity,
+      note: note.trim() || undefined,
+    };
+
+    const result = movementSchema.safeParse(input);
+    if (!result.success) {
+      setError(result.error.errors[0].message);
       return;
     }
 
     try {
-      await createMovement.mutateAsync({
-        variantId: selectedVariantId,
-        type,
-        quantity,
-        note: note.trim() || undefined,
-      });
+      await createMovement.mutateAsync(result.data);
 
       toast.success(`${type === "IN" ? "Stock In" : type === "OUT" ? "Stock Out" : "Adjustment"} recorded: ${quantity} units`);
       resetForm();

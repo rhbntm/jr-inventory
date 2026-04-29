@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import type { CreateMovementInput } from "@/lib/types";
+import { movementSchema } from "@/lib/schemas";
 
 // GET /api/movements — query: variantId, productId, type, startDate, endDate, page, pageSize
 export async function GET(req: NextRequest) {
@@ -47,41 +47,47 @@ export async function GET(req: NextRequest) {
 // POST /api/movements — atomically creates movement + updates currentStock
 export async function POST(req: NextRequest) {
   try {
-    const body: CreateMovementInput = await req.json();
+    const json = await req.json();
+    const result = movementSchema.safeParse(json);
 
-    if (!body.variantId) return NextResponse.json({ error: "variantId is required" }, { status: 400 });
-    if (!["IN", "OUT", "ADJUSTMENT"].includes(body.type)) return NextResponse.json({ error: "type must be IN, OUT, or ADJUSTMENT" }, { status: 400 });
-    if (!body.quantity || body.quantity < 1) return NextResponse.json({ error: "quantity must be a positive integer" }, { status: 400 });
+    if (!result.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: result.error.format() },
+        { status: 400 }
+      );
+    }
 
-    const variant = await db.productVariant.findUnique({ where: { id: body.variantId } });
+    const { variantId, type, quantity, note } = result.data;
+
+    const variant = await db.productVariant.findUnique({ where: { id: variantId } });
     if (!variant) return NextResponse.json({ error: "Variant not found" }, { status: 404 });
 
     // Prevent negative stock on OUT
-    if (body.type === "OUT" && variant.currentStock < body.quantity) {
+    if (type === "OUT" && variant.currentStock < quantity) {
       return NextResponse.json(
-        { error: "Insufficient stock", details: `Current stock is ${variant.currentStock}, cannot remove ${body.quantity}.` },
+        { error: "Insufficient stock", details: `Current stock is ${variant.currentStock}, cannot remove ${quantity}.` },
         { status: 422 }
       );
     }
 
-    const delta = body.type === "IN" ? body.quantity : body.type === "OUT" ? -body.quantity : 0;
+    const delta = type === "IN" ? quantity : type === "OUT" ? -quantity : 0;
 
     const [movement] = await db.$transaction([
       db.stockMovement.create({
         data: {
-          variantId: body.variantId,
-          type: body.type,
-          quantity: body.quantity,
-          note: body.note?.trim() ?? null,
+          variantId,
+          type,
+          quantity,
+          note: note || null,
           // userId: wire up from NextAuth session
         },
         include: { variant: { include: { product: true } }, user: true },
       }),
       db.productVariant.update({
-        where: { id: body.variantId },
+        where: { id: variantId },
         data: {
-          currentStock: body.type === "ADJUSTMENT"
-            ? body.quantity
+          currentStock: type === "ADJUSTMENT"
+            ? quantity
             : { increment: delta },
         },
       }),

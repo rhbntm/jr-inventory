@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { variantSchema } from "@/lib/schemas";
 
 type Params = Promise<{ id: string }>;
+
+const updateSchema = variantSchema.partial();
 
 export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   try {
     const { id } = await params;
-    const body = await req.json();
+    const json = await req.json();
+    const result = updateSchema.safeParse(json);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: result.error.format() },
+        { status: 400 }
+      );
+    }
+
     const variant = await db.productVariant.update({
       where: { id },
-      data: {
-        ...(body.sku !== undefined && { sku: body.sku?.trim() ?? null }),
-        ...(body.size !== undefined && { size: body.size?.trim() ?? null }),
-        ...(body.color !== undefined && { color: body.color?.trim() ?? null }),
-        ...(body.fabric !== undefined && { fabric: body.fabric?.trim() ?? null }),
-        ...(body.costPrice !== undefined && { costPrice: body.costPrice }),
-        ...(body.price !== undefined && { price: body.price }),
-        ...(body.lowStockAt !== undefined && { lowStockAt: body.lowStockAt }),
-      },
+      data: result.data,
       include: { product: true },
     });
     return NextResponse.json(variant);

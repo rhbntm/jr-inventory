@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { productSchema } from "@/lib/schemas";
 
 type Params = Promise<{ id: string }>;
+
+const updateSchema = productSchema.partial();
 
 export async function GET(_req: NextRequest, { params }: { params: Params }) {
   try {
@@ -21,14 +24,19 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
 export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   try {
     const { id } = await params;
-    const body = await req.json();
+    const json = await req.json();
+    const result = updateSchema.safeParse(json);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: result.error.format() },
+        { status: 400 }
+      );
+    }
+
     const product = await db.product.update({
       where: { id },
-      data: {
-        ...(body.name && { name: body.name.trim() }),
-        ...(body.description !== undefined && { description: body.description?.trim() ?? null }),
-        ...(body.categoryId !== undefined && { categoryId: body.categoryId ?? null }),
-      },
+      data: result.data,
       include: { category: true, variants: true },
     });
     return NextResponse.json(product);

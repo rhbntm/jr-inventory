@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useProducts, useCreateMovement } from "@/lib/hooks";
+import { movementSchema } from "@/lib/schemas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,18 +94,21 @@ export default function QuickStockPage() {
   };
 
   const handleSubmit = async (type: "IN" | "OUT") => {
-    if (!selectedVariantId || quantity < 1) {
-      toast.error("Please select a variant and enter a quantity");
+    const input = {
+      variantId: selectedVariantId,
+      type,
+      quantity,
+      note: note.trim() || undefined,
+    };
+
+    const result = movementSchema.safeParse(input);
+    if (!result.success) {
+      toast.error(result.error.errors[0].message);
       return;
     }
 
     try {
-      await createMovement.mutateAsync({
-        variantId: selectedVariantId,
-        type,
-        quantity,
-        note: note.trim() || undefined,
-      });
+      await createMovement.mutateAsync(result.data);
 
       // Add to session history
       const newMovement: SessionMovement = {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useCreateVariant, useUpdateVariant } from "@/lib/hooks";
+import { variantSchema } from "@/lib/schemas";
 import type { CreateVariantInput } from "@/lib/types";
 import type { ProductVariant } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ interface VariantFormProps {
 export function VariantForm({ productId, variant, onSuccess }: VariantFormProps) {
   const isEditing = !!variant;
   const createVariant = useCreateVariant();
-  const updateVariant = useUpdateVariant(variant?.id ?? "");
+  const updateVariant = useUpdateVariant();
 
   const [formData, setFormData] = useState<CreateVariantInput>({
     productId,
@@ -59,44 +60,21 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (formData.price < 0) {
-      toast.error("Selling price cannot be negative");
-      return;
-    }
-
-    if (formData.costPrice !== undefined && formData.costPrice < 0) {
-      toast.error("Cost price cannot be negative");
-      return;
-    }
-
-    if (formData.lowStockAt! < 0) {
-      toast.error("Low stock threshold cannot be negative");
+    const result = variantSchema.safeParse(formData);
+    if (!result.success) {
+      toast.error(result.error.errors[0].message);
       return;
     }
 
     try {
       if (isEditing) {
         await updateVariant.mutateAsync({
-          sku: formData.sku || undefined,
-          size: formData.size,
-          color: formData.color || undefined,
-          fabric: formData.fabric || undefined,
-          costPrice: formData.costPrice,
-          price: formData.price,
-          lowStockAt: formData.lowStockAt,
+          id: variant.id,
+          data: result.data,
         });
         toast.success("Variant updated successfully");
       } else {
-        await createVariant.mutateAsync({
-          productId,
-          sku: formData.sku || undefined,
-          size: formData.size,
-          color: formData.color || undefined,
-          fabric: formData.fabric || undefined,
-          costPrice: formData.costPrice,
-          price: formData.price,
-          lowStockAt: formData.lowStockAt,
-        });
+        await createVariant.mutateAsync(result.data);
         toast.success("Variant created successfully");
       }
 

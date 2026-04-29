@@ -81,10 +81,10 @@ export function useCreateProduct() {
   });
 }
 
-export function useUpdateProduct(id: string) {
+export function useUpdateProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<CreateProductInput>) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateProductInput> }) =>
       apiFetch<ProductWithVariants>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
   });
@@ -111,10 +111,10 @@ export function useCreateVariant() {
   });
 }
 
-export function useUpdateVariant(id: string) {
+export function useUpdateVariant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<CreateVariantInput>) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<CreateVariantInput> }) =>
       apiFetch(`/api/variants/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
   });

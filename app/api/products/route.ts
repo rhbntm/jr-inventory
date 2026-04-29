@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import type { CreateProductInput } from "@/lib/types";
+import { productSchema } from "@/lib/schemas";
 
 // GET /api/products — query: search, categoryId, page, pageSize
 export async function GET(req: NextRequest) {
@@ -37,15 +37,23 @@ export async function GET(req: NextRequest) {
 // POST /api/products
 export async function POST(req: NextRequest) {
   try {
-    const body: CreateProductInput = await req.json();
-    if (!body.name?.trim()) {
-      return NextResponse.json({ error: "Product name is required" }, { status: 400 });
+    const json = await req.json();
+    const result = productSchema.safeParse(json);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: result.error.format() },
+        { status: 400 }
+      );
     }
+
+    const { name, description, categoryId } = result.data;
+
     const product = await db.product.create({
       data: {
-        name: body.name.trim(),
-        description: body.description?.trim() ?? null,
-        categoryId: body.categoryId ?? null,
+        name,
+        description: description || null,
+        categoryId: categoryId || null,
       },
       include: { category: true, variants: true },
     });

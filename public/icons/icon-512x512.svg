@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#0f172a"/>
+  <rect x="22" y="22" width="468" height="468" rx="54" fill="#1e293b"/>
+  <text x="256" y="295" font-family="system-ui, -apple-system, sans-serif" font-size="128" font-weight="700" text-anchor="middle" fill="#f8fafc">J&R</text>
+  <text x="256" y="360" font-family="system-ui, -apple-system, sans-serif" font-size="38" font-weight="500" text-anchor="middle" fill="#94a3b8">Inventory</text>
+</svg>

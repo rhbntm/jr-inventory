@@ -32,12 +32,14 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@serwist/next": "^9.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20.19.39",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "serwist": "^9.5.8",
     "tailwindcss": "^4",
     "typescript": "^5",
     "xlsx": "^0.18.5"

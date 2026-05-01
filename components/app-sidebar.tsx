@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -12,11 +13,14 @@ import {
   Menu,
   Zap,
   BarChart3,
+  LogOut,
+  User,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/stock", label: "Quick Stock", icon: Zap },
   { href: "/products", label: "Products", icon: Package },
@@ -45,6 +49,35 @@ function NavLink({ href, label, icon: Icon }: { href: string; label: string; ico
   );
 }
 
+function UserSection() {
+  const { data: session } = useSession();
+
+  if (!session?.user) return null;
+
+  return (
+    <div className="border-t p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <User className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{session.user.name}</p>
+          <p className="text-xs text-muted-foreground truncate">{session.user.email}</p>
+        </div>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => signOut({ callbackUrl: "/" })}
+      >
+        <LogOut className="mr-2 h-4 w-4" />
+        Sign out
+      </Button>
+    </div>
+  );
+}
+
 export function AppSidebar() {
   return (
     <>
@@ -64,6 +97,7 @@ export function AppSidebar() {
                 <NavLink key={item.href} {...item} />
               ))}
             </nav>
+            <UserSection />
           </div>
         </SheetContent>
       </Sheet>
@@ -78,6 +112,7 @@ export function AppSidebar() {
             <NavLink key={item.href} {...item} />
           ))}
         </nav>
+        <UserSection />
       </div>
     </>
   );

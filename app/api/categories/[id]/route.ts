@@ -1,19 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { withErrorHandler } from "@/lib/api-wrapper";
+import { ApiError } from "@/lib/errors";
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    await db.category.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("[DELETE /api/categories/:id]", err);
-    return NextResponse.json(
-      { error: "Failed to delete category" },
-      { status: 500 }
+type Params = Promise<{ id: string }>;
+
+export const DELETE = withErrorHandler(async (_req: NextRequest, { params }: { params: Params }) => {
+  const { id } = await params;
+
+  // Check if category has products
+  const productsCount = await db.product.count({ where: { categoryId: id } });
+
+  if (productsCount > 0) {
+    throw new ApiError(
+      409,
+      "Cannot delete category with existing products",
+      { productsCount }
     );
   }
-}
+
+  await db.category.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
+});

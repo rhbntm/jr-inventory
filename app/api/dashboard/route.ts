@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { withErrorHandler } from "@/lib/api-wrapper";
 
-export async function GET() {
-  try {
+export const GET = withErrorHandler(async () => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -290,8 +290,4 @@ export async function GET() {
         lowStockAt: v.lowStockAt,
       })),
     });
-  } catch (err) {
-    console.error("[GET /api/dashboard]", err);
-    return NextResponse.json({ error: "Failed to load dashboard" }, { status: 500 });
-  }
-}
+});

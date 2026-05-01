@@ -16,8 +16,8 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     }),
     CredentialsProvider({
       name: "credentials",
@@ -57,7 +57,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;
+        token.role = user.role;
       }
       if (account?.provider === "google" && user) {
         const dbUser = await prisma.user.findUnique({
@@ -82,12 +82,16 @@ export const authOptions: NextAuthOptions = {
           where: { email: user.email! },
         });
         if (!existingUser) {
+          // Check if this is the first user - if so, make them OWNER
+          const userCount = await prisma.user.count();
+          const role = userCount === 0 ? "OWNER" : "PARTNER";
+
           await prisma.user.create({
             data: {
               email: user.email!,
               name: user.name || profile?.name || "User",
               image: user.image,
-              role: "PARTNER",
+              role,
             },
           });
         }

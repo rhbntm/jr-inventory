@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { db as prisma } from "./db";
+import { checkRateLimit, recordFailedAttempt } from "./rate-limit";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -18,6 +19,7 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      allowDangerousEmailAccountLinking: true,
     }),
     CredentialsProvider({
       name: "credentials",
@@ -30,17 +32,31 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Check rate limit before processing
+        const rateLimit = checkRateLimit(credentials.email.toLowerCase());
+        if (!rateLimit.allowed) {
+          throw new Error("TooManyAttempts");
+        }
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
 
-        if (!user || !user.password) {
+        if (!user) {
+          recordFailedAttempt(credentials.email.toLowerCase());
           return null;
+        }
+
+        // Check if user has no password (Google-only account)
+        if (!user.password) {
+          recordFailedAttempt(credentials.email.toLowerCase());
+          throw new Error("OAuthUser");
         }
 
         const isValid = await compare(credentials.password, user.password);
 
         if (!isValid) {
+          recordFailedAttempt(credentials.email.toLowerCase());
           return null;
         }
 
@@ -81,17 +97,23 @@ export const authOptions: NextAuthOptions = {
         const existingUser = await prisma.user.findUnique({
           where: { email: user.email! },
         });
-        if (!existingUser) {
-          // Check if this is the first user - if so, make them OWNER
-          const userCount = await prisma.user.count();
-          const role = userCount === 0 ? "OWNER" : "PARTNER";
 
+        if (!existingUser) {
+          // Check if setup has been completed (any users exist)
+          const userCount = await prisma.user.count();
+
+          // Block Google sign-in if no users exist - require setup first
+          if (userCount === 0) {
+            throw new Error("SetupRequired");
+          }
+
+          // Create new Google user as PARTNER (setup already done)
           await prisma.user.create({
             data: {
               email: user.email!,
               name: user.name || profile?.name || "User",
               image: user.image,
-              role,
+              role: "PARTNER",
             },
           });
         }

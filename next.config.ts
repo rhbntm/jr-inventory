@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   turbopack: {},
   allowedDevOrigins: ["192.168.1.5"],
 };

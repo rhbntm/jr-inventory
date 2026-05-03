@@ -3,31 +3,57 @@ services:
     image: postgres:17-alpine
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: jr_inventory
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5435:5432"
+      - "127.0.0.1:5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: ${TS_HOSTNAME}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--funnel
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - net_raw
+    restart: always
+    command: sh -c "tailscaled --state=/var/lib/tailscale/tailscaled.state & sleep 5 && tailscale up --authkey=${TS_AUTHKEY} --hostname=${TS_HOSTNAME} && tailscale funnel 3000 && wait"
+    networks:
+      - app-network
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    ports:
-      - "3000:3000"
+    network_mode: service:tailscale
     env_file:
       - .env
     environment:
-      DATABASE_URL: "postgresql://postgres:postgres@db:5432/jr_inventory?schema=public"
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      HOSTNAME: "0.0.0.0"
     depends_on:
       - db
+      - tailscale
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
+  tailscale_data:

@@ -27,7 +27,7 @@ services:
       - net_admin
       - net_raw
     restart: always
-    command: sh -c "tailscaled --state=/var/lib/tailscale/tailscaled.state & sleep 5 && tailscale up --authkey=${TS_AUTHKEY} --hostname=${TS_HOSTNAME} && tailscale funnel 3000 && wait"
+    command: tailscaled
     networks:
       - app-network
 

@@ -1,10 +1,11 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { NextAuthOptions } from "next-auth";
+import { getServerSession, NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { db as prisma } from "./db";
 import { checkRateLimit, recordFailedAttempt } from "./rate-limit";
+import { ApiError } from "./errors";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -19,7 +20,6 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      allowDangerousEmailAccountLinking: true,
     }),
     CredentialsProvider({
       name: "credentials",
@@ -122,3 +122,20 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+export async function requireAuth() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    throw new ApiError(401, "Unauthorized");
+  }
+  return session;
+}
+
+export async function requireRole(...allowedRoles: Array<"OWNER" | "PARTNER">) {
+  const session = await requireAuth();
+  const userRole = session.user.role as "OWNER" | "PARTNER";
+  if (!allowedRoles.includes(userRole)) {
+    throw new ApiError(403, "Forbidden");
+  }
+  return session;
+}

@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { withErrorHandler } from "@/lib/api-wrapper";
 import { ApiError } from "@/lib/errors";
+import { requireAuth } from "@/lib/auth";
 
 type Params = Promise<{ id: string }>;
 
 export const DELETE = withErrorHandler(async (_req: NextRequest, { params }: { params: Params }) => {
+  await requireAuth();
   const { id } = await params;
 
   // Check if category has products

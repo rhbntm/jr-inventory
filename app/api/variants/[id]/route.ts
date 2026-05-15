@@ -3,12 +3,14 @@ import { db } from "@/lib/db";
 import { variantSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { ApiError } from "@/lib/errors";
+import { requireAuth } from "@/lib/auth";
 
 type Params = Promise<{ id: string }>;
 
 const updateSchema = variantSchema.partial();
 
 export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { params: Params }) => {
+  await requireAuth();
   const { id } = await params;
   const data = await parseBody(req, updateSchema);
 
@@ -22,6 +24,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { par
 });
 
 export const DELETE = withErrorHandler(async (_req: NextRequest, { params }: { params: Params }) => {
+  await requireAuth();
   const { id } = await params;
 
   const movementCount = await db.stockMovement.count({ where: { variantId: id } });

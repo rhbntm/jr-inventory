@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import * as XLSX from "xlsx";
 import { withErrorHandler } from "@/lib/api-wrapper";
+import { requireAuth } from "@/lib/auth";
 
 // GET /api/export — export current stock as Excel (.xlsx)
 export const GET = withErrorHandler(async () => {
+  await requireAuth();
   // Fetch all variants with their product and category info
   const variants = await db.productVariant.findMany({
     include: {

@@ -3,9 +3,11 @@ import { db } from "@/lib/db";
 import { movementSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { ApiError } from "@/lib/errors";
+import { requireAuth } from "@/lib/auth";
 
 // GET /api/movements — query: variantId, productId, type, startDate, endDate, page, pageSize
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  await requireAuth();
   const { searchParams } = req.nextUrl;
   const variantId = searchParams.get("variantId") ?? undefined;
   const productId = searchParams.get("productId") ?? undefined;
@@ -43,6 +45,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
 // POST /api/movements — atomically creates movement + updates currentStock
 export const POST = withErrorHandler(async (req: NextRequest) => {
+  const session = await requireAuth();
   const { variantId, type, quantity, note, priceAtMovement } = await parseBody(req, movementSchema);
 
   const variant = await db.productVariant.findUnique({ where: { id: variantId } });
@@ -80,7 +83,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         quantity,
         priceAtMovement: finalPrice,
         note: note ?? null,
-        // userId: wire up from NextAuth session
+        userId: session.user.id,
       },
       include: { variant: { include: { product: true } }, user: true },
     }),

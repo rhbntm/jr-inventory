@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { productSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
+import { requireAuth } from "@/lib/auth";
 
 // GET /api/products — query: search, categoryId, page, pageSize
 export const GET = withErrorHandler(async (req: NextRequest) => {
+  await requireAuth();
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("search") ?? "";
   const categoryId = searchParams.get("categoryId") ?? undefined;
@@ -32,6 +34,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
 // POST /api/products
 export const POST = withErrorHandler(async (req: NextRequest) => {
+  await requireAuth();
   const { name, description, categoryId } = await parseBody(req, productSchema);
 
   const product = await db.product.create({

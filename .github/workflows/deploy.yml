@@ -1,0 +1,25 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main          # change to "master" if that's your default branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/brent/jr-inventory
+            git pull
+            docker compose up -d --build app --no-deps
+            curl -H "Content-Type: application/json" \
+              -d "{\"content\":\"✅ Deploy to JR Inventory successful: $(date)\"}" \
+              ${{ secrets.DISCORD_WEBHOOK }}

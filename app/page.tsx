@@ -21,7 +21,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="container mx-auto px-4 py-24 text-center">
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
-          Inventory Management --- Testing CI/CD
+          Inventory Management
           <span className="text-primary block">Made Simple</span>
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10">

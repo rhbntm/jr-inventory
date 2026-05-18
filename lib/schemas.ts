@@ -2,7 +2,10 @@ import { z } from "zod";
 
 export const variantSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
-  sku: z.string().trim().min(1, "SKU is required").nullable().optional(),
+  sku: z.preprocess(
+    (val) => (val === "" ? null : val),
+    z.string().trim().min(1, "SKU is required").nullable().optional()
+  ),
   size: z.string().trim().nullable().optional(),
   color: z.string().trim().nullable().optional(),
   fabric: z.string().trim().nullable().optional(),

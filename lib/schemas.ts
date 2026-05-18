@@ -4,7 +4,7 @@ export const variantSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
   sku: z.preprocess(
     (val) => (val === "" ? null : val),
-    z.string().trim().min(1, "SKU is required").nullable().optional()
+    z.string().trim().min(1).nullable().optional()
   ),
   size: z.string().trim().nullable().optional(),
   color: z.string().trim().nullable().optional(),

@@ -31,7 +31,7 @@ import {
 import { toast } from "sonner";
 import { VariantForm } from "@/components/variant-form";
 import { ProductVariant } from "@prisma/client";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -126,6 +126,10 @@ export default function ProductDetailPage() {
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Category:</span>
             <span>{product.category?.name ?? "None"}</span>
+          </div>
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+            <div>Created: {formatDate(product.createdAt)}</div>
+            <div>Last updated: {formatDate(product.updatedAt)}</div>
           </div>
         </CardContent>
       </Card>
@@ -242,6 +246,9 @@ export default function ProductDetailPage() {
                       <span className="text-muted-foreground">Low at: </span>
                       <span className="font-medium">{variant.lowStockAt}</span>
                     </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-1">
+                    Created: {formatDate(variant.createdAt)}
                   </div>
                 </CardContent>
               </Card>

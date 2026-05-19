@@ -38,7 +38,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 });
 
-export async function GET() {
+export const GET = withErrorHandler(async () => {
   const userCount = await prisma.user.count();
   return NextResponse.json({ setupComplete: userCount > 0 });
-}
+});

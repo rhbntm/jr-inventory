@@ -209,28 +209,28 @@ export default function ProductDetailPage() {
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Cost: </span>
-                        <span className="font-medium">₱{(Number((variant as any).costPrice) || 0).toFixed(2)}</span>
+                        <span className="font-medium">₱{(Number(variant.costPrice) || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Sell: </span>
-                        <span className={cn("font-medium", (variant as any).salePrice && "line-through text-muted-foreground text-xs")}>
+                        <span className={cn("font-medium", variant.salePrice && "line-through text-muted-foreground text-xs")}>
                           ₱{Number(variant.price).toFixed(2)}
                         </span>
-                        {(variant as any).salePrice && (
+                        {variant.salePrice && (
                           <div className="text-amber-600 font-bold">
-                            ₱{Number((variant as any).salePrice).toFixed(2)}
+                            ₱{Number(variant.salePrice).toFixed(2)}
                           </div>
                         )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Profit: </span>
                         {(() => {
-                          const currentPrice = (variant as any).salePrice ? Number((variant as any).salePrice) : Number(variant.price);
-                          const profit = currentPrice - (Number((variant as any).costPrice) || 0);
+                          const currentPrice = variant.salePrice ? Number(variant.salePrice) : Number(variant.price);
+                          const profit = currentPrice - (Number(variant.costPrice) || 0);
                           return (
                             <span className={profit >= 0 ? "text-green-600 font-medium" : "text-destructive font-medium"}>
                               ₱{profit.toFixed(2)}
-                              {(variant as any).salePrice && <span className="text-[10px] block text-amber-600">(on sale)</span>}
+                              {variant.salePrice && <span className="text-[10px] block text-amber-600">(on sale)</span>}
                             </span>
                           );
                         })()}

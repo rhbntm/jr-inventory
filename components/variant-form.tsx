@@ -52,9 +52,9 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
         size: variant.size ?? undefined,
         color: variant.color ?? "",
         fabric: variant.fabric ?? "",
-        costPrice: Number((variant as any).costPrice ?? 0),
+        costPrice: Number(variant.costPrice ?? 0),
         price: Number(variant.price),
-        salePrice: (variant as any).salePrice ? Number((variant as any).salePrice) : null,
+        salePrice: variant.salePrice ? Number(variant.salePrice) : null,
         lowStockAt: variant.lowStockAt,
       });
     }

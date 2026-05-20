@@ -12,6 +12,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   tailscale:
     image: tailscale/tailscale:latest
@@ -47,8 +52,16 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       HOSTNAME: "0.0.0.0"
     depends_on:
-      - db
-      - tailscale
+      db:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   app-network:

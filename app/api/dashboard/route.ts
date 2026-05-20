@@ -7,63 +7,193 @@ export const GET = withErrorHandler(async () => {
     await requireAuth();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Use raw SQL for low stock query (column-to-column comparison)
-    const lowStockVariants = await db.$queryRaw<
-      Array<{
-        id: string;
-        sku: string | null;
-        size: string | null;
-        color: string | null;
-        fabric: string | null;
-        currentStock: number;
-        lowStockAt: number;
-        price: number;
-        productId: string;
-        product_name: string;
-      }>
-    >`
-      SELECT
-        v.id, v.sku, v.size, v.color, v.fabric,
-        v."currentStock", v."lowStockAt", v.price, v."productId",
-        p.name as product_name
-      FROM "product_variants" v
-      JOIN "products" p ON v."productId" = p.id
-      WHERE v."currentStock" <= v."lowStockAt"
-      ORDER BY v."currentStock" ASC
-      LIMIT 20
-    `;
-
-    // Calculate inventory valuation using raw SQL for multiplications
-    const inventoryValuation = await db.$queryRaw<
-      Array<{
-        totalCost: number;
-        totalRevenue: number;
-        totalProfit: number;
-        weightedMarginSum: number;
-        totalStockForMargin: number;
-      }>
-    >`
-      SELECT
-        COALESCE(SUM(v."currentStock" * v."costPrice"), 0) as "totalCost",
-        COALESCE(SUM(v."currentStock" * v.price), 0) as "totalRevenue",
-        COALESCE(SUM(v."currentStock" * (v.price - v."costPrice")), 0) as "totalProfit",
-        COALESCE(SUM(
+    // Run all queries in parallel using Promise.all()
+    const [
+      lowStockVariants,
+      inventoryValuation,
+      trends,
+      margins,
+      topPerformers,
+      slowMovingItemsData,
+      todaySales,
+      [totalProducts, totalVariants, todayIn, todayOut, recentMovements]
+    ] = await Promise.all([
+      // Low stock variants
+      db.$queryRaw<
+        Array<{
+          id: string;
+          sku: string | null;
+          size: string | null;
+          color: string | null;
+          fabric: string | null;
+          currentStock: number;
+          lowStockAt: number;
+          price: number;
+          productId: string;
+          product_name: string;
+        }>
+      >`
+        SELECT
+          v.id, v.sku, v.size, v.color, v.fabric,
+          v."currentStock", v."lowStockAt", v.price, v."productId",
+          p.name as product_name
+        FROM "product_variants" v
+        JOIN "products" p ON v."productId" = p.id
+        WHERE v."currentStock" <= v."lowStockAt"
+        ORDER BY v."currentStock" ASC
+        LIMIT 20
+      `,
+      // Inventory valuation
+      db.$queryRaw<
+        Array<{
+          totalCost: number;
+          totalRevenue: number;
+          totalProfit: number;
+          weightedMarginSum: number;
+          totalStockForMargin: number;
+        }>
+      >`
+        SELECT
+          COALESCE(SUM(v."currentStock" * v."costPrice"), 0) as "totalCost",
+          COALESCE(SUM(v."currentStock" * v.price), 0) as "totalRevenue",
+          COALESCE(SUM(v."currentStock" * (v.price - v."costPrice")), 0) as "totalProfit",
+          COALESCE(SUM(
+            CASE
+              WHEN v.price > 0 AND v."currentStock" > 0
+              THEN v."currentStock" * ((v.price - v."costPrice") / v.price)
+              ELSE 0
+            END
+          ), 0) as "weightedMarginSum",
+          COALESCE(SUM(
+            CASE
+              WHEN v.price > 0 AND v."currentStock" > 0
+              THEN v."currentStock"
+              ELSE 0
+            END
+          ), 0) as "totalStockForMargin"
+        FROM "product_variants" v
+      `,
+      // Movement trends
+      db.$queryRaw<
+        Array<{
+          date: string;
+          type: string;
+          total: number;
+        }>
+      >`
+        SELECT
+          TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
+          "type",
+          SUM("quantity") as "total"
+        FROM "stock_movements"
+        WHERE "createdAt" >= ${sevenDaysAgo}
+        GROUP BY "date", "type"
+        ORDER BY "date" ASC
+      `,
+      // Margins
+      db.$queryRaw<
+        Array<{
+          margin_percent: number;
+        }>
+      >`
+        SELECT
           CASE
-            WHEN v.price > 0 AND v."currentStock" > 0
-            THEN v."currentStock" * ((v.price - v."costPrice") / v.price)
+            WHEN price > 0 THEN ((price - "costPrice") / price) * 100
             ELSE 0
-          END
-        ), 0) as "weightedMarginSum",
-        COALESCE(SUM(
-          CASE
-            WHEN v.price > 0 AND v."currentStock" > 0
-            THEN v."currentStock"
-            ELSE 0
-          END
-        ), 0) as "totalStockForMargin"
-      FROM "product_variants" v
-    `;
+          END as "margin_percent"
+        FROM "product_variants"
+        WHERE "currentStock" > 0
+      `,
+      // Top performers
+      db.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          sku: string | null;
+          profit: number;
+          currentStock: number;
+        }>
+      >`
+        SELECT
+          v.id,
+          p.name,
+          v.sku,
+          (v."currentStock" * (v.price - v."costPrice")) as "profit",
+          v."currentStock"
+        FROM "product_variants" v
+        JOIN "products" p ON v."productId" = p.id
+        WHERE v."currentStock" > 0
+        ORDER BY "profit" DESC
+        LIMIT 5
+      `,
+      // Slow moving items
+      db.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          sku: string | null;
+          currentStock: number;
+          last_out: string | null;
+        }>
+      >`
+        SELECT
+          v.id,
+          p.name,
+          v.sku,
+          v."currentStock",
+          (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
+        FROM "product_variants" v
+        JOIN "products" p ON v."productId" = p.id
+        WHERE v."currentStock" > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM "stock_movements" m
+          WHERE m."variantId" = v.id
+          AND m."type" = 'OUT'
+          AND m."createdAt" >= ${thirtyDaysAgo}
+        )
+        ORDER BY v."currentStock" DESC
+        LIMIT 5
+      `,
+      // Today's sales
+      db.$queryRaw<
+        Array<{
+          revenue: number;
+          profit: number;
+        }>
+      >`
+        SELECT
+          COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
+          COALESCE(SUM(m."quantity" * (m."priceAtMovement" - v."costPrice")), 0) as "profit"
+        FROM "stock_movements" m
+        JOIN "product_variants" v ON m."variantId" = v.id
+        WHERE m."type" = 'OUT'
+        AND m."createdAt" >= ${todayStart}
+      `,
+      // Transaction for counts and recent movements
+      db.$transaction([
+        db.product.count(),
+        db.productVariant.count(),
+        db.stockMovement.aggregate({
+          where: { type: "IN", createdAt: { gte: todayStart } },
+          _sum: { quantity: true },
+        }),
+        db.stockMovement.aggregate({
+          where: { type: "OUT", createdAt: { gte: todayStart } },
+          _sum: { quantity: true },
+        }),
+        db.stockMovement.findMany({
+          include: { variant: { include: { product: true } }, user: true },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        }),
+      ])
+    ]);
 
     const valuation = inventoryValuation[0];
     const weightedMarginSum = Number(valuation.weightedMarginSum);
@@ -72,28 +202,6 @@ export const GET = withErrorHandler(async () => {
       totalStockForMargin > 0
         ? (weightedMarginSum / totalStockForMargin) * 100
         : 0;
-
-    // Calculate movement trend (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    const trends = await db.$queryRaw<
-      Array<{
-        date: string;
-        type: string;
-        total: number;
-      }>
-    >`
-      SELECT
-        TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
-        "type",
-        SUM("quantity") as "total"
-      FROM "stock_movements"
-      WHERE "createdAt" >= ${sevenDaysAgo}
-      GROUP BY "date", "type"
-      ORDER BY "date" ASC
-    `;
 
     // Format trends for Recharts
     const trendMap = new Map<string, { name: string; in: number; out: number }>();
@@ -114,21 +222,6 @@ export const GET = withErrorHandler(async () => {
     });
 
     const movementTrend = Array.from(trendMap.values());
-
-    // Calculate margin distribution
-    const margins = await db.$queryRaw<
-      Array<{
-        margin_percent: number;
-      }>
-    >`
-      SELECT
-        CASE
-          WHEN price > 0 THEN ((price - "costPrice") / price) * 100
-          ELSE 0
-        END as "margin_percent"
-      FROM "product_variants"
-      WHERE "currentStock" > 0
-    `;
 
     const distribution = [
       { name: "< 10%", value: 0, count: 0 },
@@ -155,96 +248,6 @@ export const GET = withErrorHandler(async () => {
         d.value = Math.round((d.count / totalWithStock) * 100);
       });
     }
-
-    // Calculate top performers by profit potential
-    const topPerformers = await db.$queryRaw<
-      Array<{
-        id: string;
-        name: string;
-        sku: string | null;
-        profit: number;
-        currentStock: number;
-      }>
-    >`
-      SELECT
-        v.id,
-        p.name,
-        v.sku,
-        (v."currentStock" * (v.price - v."costPrice")) as "profit",
-        v."currentStock"
-      FROM "product_variants" v
-      JOIN "products" p ON v."productId" = p.id
-      WHERE v."currentStock" > 0
-      ORDER BY "profit" DESC
-      LIMIT 5
-    `;
-
-    // Calculate slow moving items (Variants with stock but no OUT movements in last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const slowMovingItemsData = await db.$queryRaw<
-      Array<{
-        id: string;
-        name: string;
-        sku: string | null;
-        currentStock: number;
-        last_out: string | null;
-      }>
-    >`
-      SELECT
-        v.id,
-        p.name,
-        v.sku,
-        v."currentStock",
-        (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
-      FROM "product_variants" v
-      JOIN "products" p ON v."productId" = p.id
-      WHERE v."currentStock" > 0
-      AND NOT EXISTS (
-        SELECT 1 FROM "stock_movements" m
-        WHERE m."variantId" = v.id
-        AND m."type" = 'OUT'
-        AND m."createdAt" >= ${thirtyDaysAgo}
-      )
-      ORDER BY v."currentStock" DESC
-      LIMIT 5
-    `;
-
-    // Calculate today's actual revenue and profit from movements
-    const todaySales = await db.$queryRaw<
-      Array<{
-        revenue: number;
-        profit: number;
-      }>
-    >`
-      SELECT
-        COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
-        COALESCE(SUM(m."quantity" * (m."priceAtMovement" - v."costPrice")), 0) as "profit"
-      FROM "stock_movements" m
-      JOIN "product_variants" v ON m."variantId" = v.id
-      WHERE m."type" = 'OUT'
-      AND m."createdAt" >= ${todayStart}
-    `;
-
-    const [totalProducts, totalVariants, todayIn, todayOut, recentMovements] =
-      await db.$transaction([
-        db.product.count(),
-        db.productVariant.count(),
-        db.stockMovement.aggregate({
-          where: { type: "IN", createdAt: { gte: todayStart } },
-          _sum: { quantity: true },
-        }),
-        db.stockMovement.aggregate({
-          where: { type: "OUT", createdAt: { gte: todayStart } },
-          _sum: { quantity: true },
-        }),
-        db.stockMovement.findMany({
-          include: { variant: { include: { product: true } }, user: true },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        }),
-      ]);
 
     return NextResponse.json({
       stats: {

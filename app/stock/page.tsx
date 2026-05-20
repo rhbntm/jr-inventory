@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useProducts, useCreateMovement } from "@/lib/hooks";
 import { movementSchema } from "@/lib/schemas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,6 +91,17 @@ export default function QuickStockPage() {
     // Focus back to search
     setTimeout(() => setSearchOpen(true), 100);
   }, []);
+
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        resetForm();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscKey);
+    return () => window.removeEventListener("keydown", handleEscKey);
+  }, [resetForm]);
 
   const adjustQuantity = (delta: number) => {
     setQuantity((prev) => Math.max(1, prev + delta));

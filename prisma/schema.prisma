@@ -124,6 +124,7 @@ model StockMovement {
   type      MovementType
   quantity  Int
   priceAtMovement Decimal?     @db.Decimal(10, 2)
+  costPriceAtMovement Decimal? @db.Decimal(10, 2)
   note      String?
   userId    String?
   createdAt DateTime     @default(now())

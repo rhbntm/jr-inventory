@@ -169,7 +169,7 @@ export const GET = withErrorHandler(async () => {
       >`
         SELECT
           COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
-          COALESCE(SUM(m."quantity" * (m."priceAtMovement" - v."costPrice")), 0) as "profit"
+          COALESCE(SUM(m."quantity" * (m."priceAtMovement" - COALESCE(m."costPriceAtMovement", v."costPrice"))), 0) as "profit"
         FROM "stock_movements" m
         JOIN "product_variants" v ON m."variantId" = v.id
         WHERE m."type" = 'OUT'

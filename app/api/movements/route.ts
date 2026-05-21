@@ -64,38 +64,46 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
   }
 
-  // Prevent negative stock on OUT
-  if (type === "OUT" && variant.currentStock < quantity) {
-    throw new ApiError(
-      422,
-      "Insufficient stock",
-      { currentStock: variant.currentStock, requestedQuantity: quantity }
-    );
-  }
+  // Perform transaction with atomic safety
+  const movement = await db.$transaction(async (tx) => {
+    if (type === "OUT") {
+      const updated = await tx.productVariant.updateMany({
+        where: { id: variantId, currentStock: { gte: quantity } },
+        data: { currentStock: { decrement: quantity } }
+      });
+      if (updated.count === 0) {
+        // Fetch fresh variant inside transaction to report actual stock
+        const freshVariant = await tx.productVariant.findUnique({ where: { id: variantId } });
+        throw new ApiError(
+          422,
+          "Insufficient stock",
+          { currentStock: freshVariant?.currentStock ?? 0, requestedQuantity: quantity }
+        );
+      }
+    } else {
+      await tx.productVariant.update({
+        where: { id: variantId },
+        data: {
+          currentStock: type === "ADJUSTMENT"
+            ? quantity
+            : { increment: quantity },
+        },
+      });
+    }
 
-  const delta = type === "IN" ? quantity : type === "OUT" ? -quantity : 0;
-
-  const [movement] = await db.$transaction([
-    db.stockMovement.create({
+    return await tx.stockMovement.create({
       data: {
         variantId,
         type,
         quantity,
         priceAtMovement: finalPrice,
+        costPriceAtMovement: Number(variant.costPrice),
         note: note ?? null,
         userId: session.user.id,
       },
       include: { variant: { include: { product: true } }, user: true },
-    }),
-    db.productVariant.update({
-      where: { id: variantId },
-      data: {
-        currentStock: type === "ADJUSTMENT"
-          ? quantity
-          : { increment: delta },
-      },
-    }),
-  ]);
+    });
+  });
 
   return NextResponse.json(movement, { status: 201 });
 });

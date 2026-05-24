@@ -8,7 +8,7 @@ export class ProductRepo {
   static async getProductWithVariants(productId: string): Promise<ProductWithVariants | null> {
     return db.product.findUnique({
       where: { id: productId },
-      include: { category: true, variants: true },
+      include: { category: true, variants: { orderBy: { createdAt: "asc" } } },
     }) as Promise<ProductWithVariants | null>;
   }
 

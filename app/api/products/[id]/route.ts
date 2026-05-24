@@ -4,6 +4,7 @@ import { productSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { ApiError } from "@/lib/errors";
 import { requireAuth } from "@/lib/auth";
+import { ProductRepo } from "@/app/repositories/productRepo";
 
 type Params = Promise<{ id: string }>;
 
@@ -12,10 +13,7 @@ const updateSchema = productSchema.partial();
 export const GET = withErrorHandler(async (_req: NextRequest, { params }: { params: Params }) => {
   await requireAuth();
   const { id } = await params;
-  const product = await db.product.findUnique({
-    where: { id },
-    include: { category: true, variants: { orderBy: { createdAt: "asc" } } },
-  });
+  const product = await ProductRepo.getProductWithVariants(id);
 
   if (!product) {
     throw new ApiError(404, "Product not found");

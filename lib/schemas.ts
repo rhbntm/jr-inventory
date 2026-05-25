@@ -32,3 +32,32 @@ export const movementSchema = z.object({
 export type VariantInput = z.infer<typeof variantSchema>;
 export type ProductInput = z.infer<typeof productSchema>;
 export type MovementInput = z.infer<typeof movementSchema>;
+
+export const batchSchema = z.object({
+  supplierName: z.string().trim().nullable().optional(),
+  purchaseDate: z.coerce.date().nullable().optional(),
+  totalCost: z.coerce.number().min(0).nullable().optional(),
+  estimatedQty: z.coerce.number().int().min(0).nullable().optional(),
+  category: z.string().trim().nullable().optional(),
+  notes: z.string().trim().nullable().optional(),
+});
+
+export const estimateSchema = z.object({
+  sampleWeight: z.coerce.number().positive("Sample weight must be positive"),
+  sampleQty: z.coerce.number().int().positive("Sample quantity must be at least 1"),
+  totalWeight: z.coerce.number().positive("Total weight must be positive"),
+});
+
+export const batchProcessSchema = z.object({
+  assignments: z.array(z.object({
+    variantId: z.string().min(1),
+    quantity: z.coerce.number().int().min(0),
+    costPerUnit: z.coerce.number().min(0).nullable().optional(),
+  })).min(1, "At least one variant assignment is required"),
+  damagedQty: z.coerce.number().int().min(0).default(0),
+  actualQty: z.coerce.number().int().min(0).nullable().optional(),
+});
+
+export type BatchInput = z.infer<typeof batchSchema>;
+export type EstimateInput = z.infer<typeof estimateSchema>;
+export type BatchProcessInput = z.infer<typeof batchProcessSchema>;

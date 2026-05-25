@@ -1,6 +1,6 @@
 "use client";
 
-import { useDashboard } from "@/lib/hooks";
+import { useDashboard, useBatchAnalytics } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   Wallet,
   Percent,
   BarChart3,
+  Layers,
 } from "lucide-react";
 import {
   LineChart,
@@ -57,6 +58,7 @@ function StatCard({
 
 export default function DashboardPage() {
   const { data, isLoading, isError } = useDashboard();
+  const { data: analytics, isLoading: analyticsLoading } = useBatchAnalytics();
 
   const stats = data?.stats;
   const lowStock = data?.lowStockItems ?? [];
@@ -274,6 +276,92 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Batch Analytics */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Top Batches by Profit */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" />
+              Top Batches by Profit
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analyticsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (analytics?.topBatchesByProfit ?? []).length === 0 ? (
+              <p className="text-muted-foreground text-sm">No processed batches yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {(analytics?.topBatchesByProfit ?? []).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-sm">{b.supplierName ?? "Unknown"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {b.purchaseDate ? new Date(b.purchaseDate).toLocaleDateString() : "—"}
+                        {b.damagedQty ? ` · ${b.damagePercent}% damaged` : ""}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-green-600">
+                        +₱{b.estimatedProfit.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        cost ₱{(b.totalCost ?? 0).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Highest Damage Batches */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Highest Damage Rate
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {analyticsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (analytics?.highestDamageBatches ?? []).length === 0 ? (
+              <p className="text-muted-foreground text-sm">No damage data yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {(analytics?.highestDamageBatches ?? []).map((b) => (
+                  <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-sm">{b.supplierName ?? "Unknown"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {b.purchaseDate ? new Date(b.purchaseDate).toLocaleDateString() : "—"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={b.damagePercent > 20 ? "destructive" : "secondary"}>
+                        {b.damagePercent}% damaged
+                      </Badge>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {b.damagedQty ?? 0} / {b.actualQty ?? "?"} pcs
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

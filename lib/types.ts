@@ -116,3 +116,31 @@ export type ApiError = {
   error: string;
   details?: string;
 };
+
+export type BatchWithMovements = Prisma.BatchGetPayload<{
+  include: {
+    movements: {
+      include: { variant: { include: { product: true } } };
+    };
+  };
+}>;
+
+export type BatchAnalytics = {
+  topBatchesByProfit: {
+    id: string;
+    supplierName: string | null;
+    purchaseDate: Date | null;
+    totalCost: number | null;
+    estimatedProfit: number;
+    damagedQty: number | null;
+    damagePercent: number;
+  }[];
+  highestDamageBatches: {
+    id: string;
+    supplierName: string | null;
+    purchaseDate: Date | null;
+    damagedQty: number | null;
+    actualQty: number | null;
+    damagePercent: number;
+  }[];
+};

@@ -15,6 +15,7 @@ import {
   BarChart3,
   LogOut,
   User,
+  Layers,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/stock", label: "Quick Stock", icon: Zap },
   { href: "/products", label: "Products", icon: Package },
+  { href: "/batches", label: "Batches", icon: Layers },
   { href: "/movements", label: "Movements", icon: ArrowLeftRight },
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/export", label: "Export", icon: Download },

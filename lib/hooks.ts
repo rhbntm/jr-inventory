@@ -223,3 +223,73 @@ export function useCategories() {
     queryFn: () => apiFetch<{ id: string; name: string }[]>("/api/categories"),
   });
 }
+
+// ─── Batches ─────────────────────────────────────────────────────────────────
+
+import type { BatchWithMovements, BatchAnalytics } from "./types";
+import type { BatchInput, BatchProcessInput, EstimateInput } from "./schemas";
+
+export const batchQueryKeys = {
+  all: ["batches"] as const,
+  list: (params?: Record<string, unknown>) => ["batches", "list", params] as const,
+  detail: (id: string) => ["batches", id] as const,
+  analytics: ["batches", "analytics"] as const,
+};
+
+export function useBatches(params: { page?: number; pageSize?: number } = {}) {
+  return useQuery({
+    queryKey: batchQueryKeys.list(params),
+    queryFn: () =>
+      apiFetch<{ data: BatchWithMovements[]; total: number; page: number; pageSize: number; totalPages: number }>(
+        `/api/batches?${buildQuery(params)}`
+      ),
+  });
+}
+
+export function useBatch(id: string) {
+  return useQuery({
+    queryKey: batchQueryKeys.detail(id),
+    queryFn: () => apiFetch<BatchWithMovements>(`/api/batches/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BatchInput) =>
+      apiFetch<BatchWithMovements>("/api/batches", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: batchQueryKeys.all }); },
+  });
+}
+
+export function useProcessBatch(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BatchProcessInput) =>
+      apiFetch<BatchWithMovements>(`/api/batches/${id}/process`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: batchQueryKeys.all });
+      qc.invalidateQueries({ queryKey: batchQueryKeys.detail(id) });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useEstimateQty() {
+  return useMutation({
+    mutationFn: (data: EstimateInput) =>
+      apiFetch<{ estimatedTotalQty: number; weightPerUnit: number }>("/api/batches/estimate", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  });
+}
+
+export function useBatchAnalytics() {
+  return useQuery({
+    queryKey: batchQueryKeys.analytics,
+    queryFn: () => apiFetch<BatchAnalytics>("/api/batches/analytics"),
+  });
+}

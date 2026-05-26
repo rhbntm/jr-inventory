@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { productSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
+import { ProductRepo } from "@/app/repositories/productRepo";
 
 // GET /api/products — query: search, categoryId, page, pageSize
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -13,38 +13,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? 20)));
 
-  const where = {
-    ...(search && { name: { contains: search, mode: "insensitive" as const } }),
-    ...(categoryId && { categoryId }),
-  };
+  const result = await ProductRepo.getProducts(search, categoryId, page, pageSize);
 
-  const [products, total] = await db.$transaction([
-    db.product.findMany({
-      where,
-      include: { category: true, variants: { orderBy: { createdAt: "asc" } } },
-      orderBy: { updatedAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    db.product.count({ where }),
-  ]);
-
-  return NextResponse.json({ data: products, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+  return NextResponse.json(result);
 });
 
 // POST /api/products
 export const POST = withErrorHandler(async (req: NextRequest) => {
   await requireAuth();
-  const { name, description, categoryId } = await parseBody(req, productSchema);
+  const data = await parseBody(req, productSchema);
 
-  const product = await db.product.create({
-    data: {
-      name,
-      description: description ?? null,
-      categoryId: categoryId ?? null,
-    },
-    include: { category: true, variants: true },
-  });
+  const product = await ProductRepo.createProduct(data);
 
   return NextResponse.json(product, { status: 201 });
 });

@@ -52,7 +52,7 @@ export function handlePrismaError(error: unknown): ApiError {
       case PRISMA_ERRORS.NOT_FOUND:
         return new ApiError(404, "Record not found");
       case PRISMA_ERRORS.FK_CONSTRAINT:
-        return new ApiError(409, "Cannot delete: related records exist");
+        return new ApiError(409, "Foreign key constraint failed: related record missing or still in use");
       default:
         return new ApiError(500, "Database error");
     }

@@ -8,7 +8,13 @@ async function cleanup() {
     await db.stockMovement.deleteMany();
   } catch {}
   try {
+    await db.batchMovement.deleteMany();
+  } catch {}
+  try {
     await db.productVariant.deleteMany();
+  } catch {}
+  try {
+    await db.batch.deleteMany();
   } catch {}
   try {
     await db.product.deleteMany();

@@ -4,7 +4,8 @@ import path from 'path';
 export default defineConfig({
   test: {
     globals: true,
-    setupFiles: [],
+    setupFiles: ['./vitest.setup.ts'],
+    fileParallelism: false,
     alias: {
       '@': path.resolve(__dirname, '.'),
     },
@@ -12,7 +13,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/lib/db.test.ts',
-      '**/movements.test.ts',
     ],
   },
 });
+

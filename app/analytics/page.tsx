@@ -13,8 +13,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
   Cell,
   LineChart,
   Line,
@@ -184,7 +182,7 @@ export default function AnalyticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-primary" />
-              Today's Actual Revenue
+              Today&apos;s Actual Revenue
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -203,7 +201,7 @@ export default function AnalyticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-green-700">
               <TrendingUp className="h-4 w-4" />
-              Today's Actual Profit
+              Today&apos;s Actual Profit
             </CardTitle>
           </CardHeader>
           <CardContent>

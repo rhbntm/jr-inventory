@@ -40,6 +40,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   // Initialize form when editing
   useEffect(() => {
     if (product) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         name: product.name,
         description: product.description ?? "",
@@ -82,7 +83,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         setFormData({ name: "", description: "", categoryId: undefined });
       }
       onSuccess?.();
-    } catch (err: any) {
+    } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save product";
       toast.error(message);
       if (message.toLowerCase().includes("name")) {

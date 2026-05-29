@@ -8,22 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Card } from "@/components/ui/card";
+import { VariantSelector } from "@/components/variant-selector";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Search, Package, ArrowDownLeft, ArrowUpRight, RotateCcw } from "lucide-react";
+import { Package, ArrowDownLeft, ArrowUpRight, RotateCcw } from "lucide-react";
 
 interface StockMovementFormProps {
   variantId?: string;
@@ -39,7 +28,6 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
   const [type, setType] = useState<"IN" | "OUT" | "ADJUSTMENT">(preselectedType ?? "OUT");
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState<string>("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -54,7 +42,6 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
       fabric: variant.fabric,
       currentStock: variant.currentStock,
       lowStockAt: variant.lowStockAt,
-      price: variant.price,
       searchText: `${product.name} ${variant.sku ?? ""} ${variant.size ?? ""} ${variant.color ?? ""} ${variant.fabric ?? ""}`.toLowerCase(),
     }))
   ) ?? [];
@@ -104,7 +91,7 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
       toast.success(`${type === "IN" ? "Stock In" : type === "OUT" ? "Stock Out" : "Adjustment"} recorded: ${quantity} units`);
       resetForm();
       onSuccess?.();
-    } catch (err: any) {
+    } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to record movement";
       
       if (message.toLowerCase().includes("insufficient")) {
@@ -125,69 +112,13 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
       {!preselectedVariantId && (
         <div className="space-y-2">
           <Label className={fieldErrors.variantId ? "text-destructive" : ""}>Product / Variant *</Label>
-          <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-            <PopoverTrigger>
-              <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={searchOpen}
-                className={cn("w-full justify-between h-12 text-base", fieldErrors.variantId && "border-destructive focus-visible:ring-destructive")}
-                disabled={productsLoading}
-              >
-                {selectedVariant ? (
-                  <span className="truncate text-left">
-                    {selectedVariant.productName} —{" "}
-                    {[selectedVariant.size, selectedVariant.color, selectedVariant.sku]
-                      .filter(Boolean)
-                      .join(" / ") || "No details"}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Search className="h-4 w-4" />
-                    Search by name, SKU, size, or color...
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[400px] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Search products..." />
-                <CommandList>
-                  <CommandEmpty>No products found.</CommandEmpty>
-                  <CommandGroup>
-                    {allVariants.map((variant) => (
-                      <CommandItem
-                        key={variant.id}
-                        value={variant.searchText}
-                        onSelect={() => {
-                          setSelectedVariantId(variant.id);
-                          setSearchOpen(false);
-                        }}
-                      >
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium">{variant.productName}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {[variant.size, variant.color, variant.fabric, variant.sku]
-                              .filter(Boolean)
-                              .join(" / ") || "No details"}
-                          </span>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge
-                              variant={variant.currentStock === 0 ? "destructive" : variant.currentStock <= variant.lowStockAt ? "secondary" : "default"}
-                              className="text-xs"
-                            >
-                              Stock: {variant.currentStock}
-                            </Badge>
-                          </div>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          {fieldErrors.variantId && <p className="text-xs text-destructive font-medium">{fieldErrors.variantId}</p>}
+          <VariantSelector
+            variants={allVariants}
+            selectedVariantId={selectedVariantId}
+            onSelectVariant={setSelectedVariantId}
+            isLoading={productsLoading}
+            error={fieldErrors.variantId}
+          />
         </div>
       )}
 
@@ -298,5 +229,3 @@ export function StockMovementForm({ variantId: preselectedVariantId, type: prese
     </form>
   );
 }
-
-import { Card } from "@/components/ui/card";

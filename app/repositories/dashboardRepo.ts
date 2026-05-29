@@ -2,6 +2,183 @@ import { db } from '@/lib/db';
 import type { DashboardStats, LowStockItem } from '@/lib/types';
 
 export class DashboardRepo {
+  private static async getLowStockVariants() {
+    return db.$queryRaw<
+      Array<{
+        id: string;
+        sku: string | null;
+        size: string | null;
+        color: string | null;
+        fabric: string | null;
+        currentStock: number;
+        lowStockAt: number;
+        price: number;
+        productId: string;
+        product_name: string;
+      }>
+    >`
+      SELECT
+        v.id, v.sku, v.size, v.color, v.fabric,
+        v."currentStock", v."lowStockAt", v.price, v."productId",
+        p.name as product_name
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" <= v."lowStockAt"
+      ORDER BY v."currentStock" ASC
+      LIMIT 20
+    `;
+  }
+
+  private static async getInventoryValuation() {
+    return db.$queryRaw<
+      Array<{
+        totalCost: number;
+        totalRevenue: number;
+        totalProfit: number;
+        weightedMarginSum: number;
+        totalStockForMargin: number;
+      }>
+    >`
+      SELECT
+        COALESCE(SUM(v."currentStock" * v."costPrice"), 0) as "totalCost",
+        COALESCE(SUM(v."currentStock" * v.price), 0) as "totalRevenue",
+        COALESCE(SUM(v."currentStock" * (v.price - v."costPrice")), 0) as "totalProfit",
+        COALESCE(SUM(
+          CASE WHEN v.price > 0 AND v."currentStock" > 0
+          THEN v."currentStock" * ((v.price - v."costPrice") / v.price)
+          ELSE 0 END
+        ), 0) as "weightedMarginSum",
+        COALESCE(SUM(
+          CASE WHEN v.price > 0 AND v."currentStock" > 0
+          THEN v."currentStock"
+          ELSE 0 END
+        ), 0) as "totalStockForMargin"
+      FROM "product_variants" v
+    `;
+  }
+
+  private static async getMovementTrends(sevenDaysAgo: Date) {
+    return db.$queryRaw<
+      Array<{
+        date: string;
+        type: string;
+        total: number;
+      }>
+    >`
+      SELECT
+        TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
+        "type",
+        SUM("quantity") as "total"
+      FROM "stock_movements"
+      WHERE "createdAt" >= ${sevenDaysAgo}
+      GROUP BY "date", "type"
+      ORDER BY "date" ASC
+    `;
+  }
+
+  private static async getMarginPercentages() {
+    return db.$queryRaw<
+      Array<{
+        margin_percent: number;
+      }>
+    >`
+      SELECT CASE WHEN price > 0 THEN ((price - "costPrice") / price) * 100 ELSE 0 END as "margin_percent"
+      FROM "product_variants"
+      WHERE "currentStock" > 0
+    `;
+  }
+
+  private static async getTopPerformers() {
+    return db.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        sku: string | null;
+        profit: number;
+        currentStock: number;
+      }>
+    >`
+      SELECT
+        v.id,
+        p.name,
+        v.sku,
+        (v."currentStock" * (v.price - v."costPrice")) as "profit",
+        v."currentStock"
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" > 0
+      ORDER BY "profit" DESC
+      LIMIT 5
+    `;
+  }
+
+  private static async getSlowMovingItems(thirtyDaysAgo: Date) {
+    return db.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        sku: string | null;
+        currentStock: number;
+        last_out: string | null;
+      }>
+    >`
+      SELECT
+        v.id,
+        p.name,
+        v.sku,
+        v."currentStock",
+        (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM "stock_movements" m
+          WHERE m."variantId" = v.id
+            AND m."type" = 'OUT'
+            AND m."createdAt" >= ${thirtyDaysAgo}
+        )
+      ORDER BY v."currentStock" DESC
+      LIMIT 5
+    `;
+  }
+
+  private static async getTodaySales(todayStart: Date) {
+    return db.$queryRaw<
+      Array<{
+        revenue: number;
+        profit: number;
+      }>
+    >`
+      SELECT
+        COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
+        COALESCE(SUM(m."quantity" * (m."priceAtMovement" - COALESCE(m."costPriceAtMovement", v."costPrice"))), 0) as "profit"
+      FROM "stock_movements" m
+      JOIN "product_variants" v ON m."variantId" = v.id
+      WHERE m."type" = 'OUT'
+        AND m."createdAt" >= ${todayStart}
+    `;
+  }
+
+  private static async getCountsAndRecentMovements(todayStart: Date) {
+    return db.$transaction([
+      db.product.count(),
+      db.productVariant.count(),
+      db.stockMovement.aggregate({
+        where: { type: 'IN', createdAt: { gte: todayStart } },
+        _sum: { quantity: true },
+      }),
+      db.stockMovement.aggregate({
+        where: { type: 'OUT', createdAt: { gte: todayStart } },
+        _sum: { quantity: true },
+      }),
+      db.stockMovement.findMany({
+        include: { variant: { include: { product: true } }, user: true },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+  }
+
   /**
    * Returns the full dashboard payload used by GET /api/dashboard.
    * The shape matches the existing DashboardStats type.
@@ -26,167 +203,14 @@ export class DashboardRepo {
       todaySales,
       [totalProducts, totalVariants, todayIn, todayOut, recentMovements],
     ] = await Promise.all([
-      // Low stock variants
-      db.$queryRaw<
-        Array<{
-          id: string;
-          sku: string | null;
-          size: string | null;
-          color: string | null;
-          fabric: string | null;
-          currentStock: number;
-          lowStockAt: number;
-          price: number;
-          productId: string;
-          product_name: string;
-        }>
-      >`
-        SELECT
-          v.id, v.sku, v.size, v.color, v.fabric,
-          v."currentStock", v."lowStockAt", v.price, v."productId",
-          p.name as product_name
-        FROM "product_variants" v
-        JOIN "products" p ON v."productId" = p.id
-        WHERE v."currentStock" <= v."lowStockAt"
-        ORDER BY v."currentStock" ASC
-        LIMIT 20
-      `,
-      // Inventory valuation
-      db.$queryRaw<
-        Array<{
-          totalCost: number;
-          totalRevenue: number;
-          totalProfit: number;
-          weightedMarginSum: number;
-          totalStockForMargin: number;
-        }>
-      >`
-        SELECT
-          COALESCE(SUM(v."currentStock" * v."costPrice"), 0) as "totalCost",
-          COALESCE(SUM(v."currentStock" * v.price), 0) as "totalRevenue",
-          COALESCE(SUM(v."currentStock" * (v.price - v."costPrice")), 0) as "totalProfit",
-          COALESCE(SUM(
-            CASE WHEN v.price > 0 AND v."currentStock" > 0
-            THEN v."currentStock" * ((v.price - v."costPrice") / v.price)
-            ELSE 0 END
-          ), 0) as "weightedMarginSum",
-          COALESCE(SUM(
-            CASE WHEN v.price > 0 AND v."currentStock" > 0
-            THEN v."currentStock"
-            ELSE 0 END
-          ), 0) as "totalStockForMargin"
-        FROM "product_variants" v
-      `,
-      // Movement trends (last 7 days)
-      db.$queryRaw<
-        Array<{
-          date: string;
-          type: string;
-          total: number;
-        }>
-      >`
-        SELECT
-          TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
-          "type",
-          SUM("quantity") as "total"
-        FROM "stock_movements"
-        WHERE "createdAt" >= ${sevenDaysAgo}
-        GROUP BY "date", "type"
-        ORDER BY "date" ASC
-      `,
-      // Margin percentages for all stocked items
-      db.$queryRaw<
-        Array<{
-          margin_percent: number;
-        }>
-      >`
-        SELECT CASE WHEN price > 0 THEN ((price - "costPrice") / price) * 100 ELSE 0 END as "margin_percent"
-        FROM "product_variants"
-        WHERE "currentStock" > 0
-      `,
-      // Top profit performers
-      db.$queryRaw<
-        Array<{
-          id: string;
-          name: string;
-          sku: string | null;
-          profit: number;
-          currentStock: number;
-        }>
-      >`
-        SELECT
-          v.id,
-          p.name,
-          v.sku,
-          (v."currentStock" * (v.price - v."costPrice")) as "profit",
-          v."currentStock"
-        FROM "product_variants" v
-        JOIN "products" p ON v."productId" = p.id
-        WHERE v."currentStock" > 0
-        ORDER BY "profit" DESC
-        LIMIT 5
-      `,
-      // Slow moving items (no OUT movement in last 30 days)
-      db.$queryRaw<
-        Array<{
-          id: string;
-          name: string;
-          sku: string | null;
-          currentStock: number;
-          last_out: string | null;
-        }>
-      >`
-        SELECT
-          v.id,
-          p.name,
-          v.sku,
-          v."currentStock",
-          (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
-        FROM "product_variants" v
-        JOIN "products" p ON v."productId" = p.id
-        WHERE v."currentStock" > 0
-          AND NOT EXISTS (
-            SELECT 1 FROM "stock_movements" m
-            WHERE m."variantId" = v.id
-              AND m."type" = 'OUT'
-              AND m."createdAt" >= ${thirtyDaysAgo}
-          )
-        ORDER BY v."currentStock" DESC
-        LIMIT 5
-      `,
-      // Today's sales (revenue & profit)
-      db.$queryRaw<
-        Array<{
-          revenue: number;
-          profit: number;
-        }>
-      >`
-        SELECT
-          COALESCE(SUM(m."quantity" * m."priceAtMovement"), 0) as "revenue",
-          COALESCE(SUM(m."quantity" * (m."priceAtMovement" - COALESCE(m."costPriceAtMovement", v."costPrice"))), 0) as "profit"
-        FROM "stock_movements" m
-        JOIN "product_variants" v ON m."variantId" = v.id
-        WHERE m."type" = 'OUT'
-          AND m."createdAt" >= ${todayStart}
-      `,
-      // Counts and recent movements
-      db.$transaction([
-        db.product.count(),
-        db.productVariant.count(),
-        db.stockMovement.aggregate({
-          where: { type: 'IN', createdAt: { gte: todayStart } },
-          _sum: { quantity: true },
-        }),
-        db.stockMovement.aggregate({
-          where: { type: 'OUT', createdAt: { gte: todayStart } },
-          _sum: { quantity: true },
-        }),
-        db.stockMovement.findMany({
-          include: { variant: { include: { product: true } }, user: true },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }),
-      ])
+      this.getLowStockVariants(),
+      this.getInventoryValuation(),
+      this.getMovementTrends(sevenDaysAgo),
+      this.getMarginPercentages(),
+      this.getTopPerformers(),
+      this.getSlowMovingItems(thirtyDaysAgo),
+      this.getTodaySales(todayStart),
+      this.getCountsAndRecentMovements(todayStart),
     ]);
 
     // Process margins distribution

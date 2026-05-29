@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { ProfitPreview } from "@/components/profit-preview";
 
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "Free Size", "Other"];
 
@@ -46,6 +47,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
   // Initialize form when editing
   useEffect(() => {
     if (variant) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         productId,
         sku: variant.sku ?? "",
@@ -104,7 +106,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
         });
       }
       onSuccess?.();
-    } catch (err: any) {
+    } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save variant";
       toast.error(message);
       
@@ -263,31 +265,11 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
       </div>
 
       {/* Profit Preview */}
-      {(formData.price > 0 || (formData.salePrice ?? 0) > 0) && (
-        <div className="p-3 bg-muted rounded-md text-sm space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground font-medium">Standard Profit:</span>
-            <span className={formData.price - (formData.costPrice ?? 0) >= 0 ? "text-green-600 font-bold" : "text-destructive font-bold"}>
-              ₱{(formData.price - (formData.costPrice ?? 0)).toFixed(2)} 
-              <span className="text-xs ml-1 font-normal">
-                ({formData.price > 0 ? (((formData.price - (formData.costPrice ?? 0)) / formData.price) * 100).toFixed(1) : 0}%)
-              </span>
-            </span>
-          </div>
-          
-          {formData.salePrice !== null && formData.salePrice !== undefined && formData.salePrice > 0 && (
-            <div className="flex justify-between items-center pt-2 border-t border-muted-foreground/20">
-              <span className="text-amber-600 font-medium">Sale Profit:</span>
-              <span className={formData.salePrice - (formData.costPrice ?? 0) >= 0 ? "text-amber-600 font-bold" : "text-destructive font-bold"}>
-                ₱{(formData.salePrice - (formData.costPrice ?? 0)).toFixed(2)}
-                <span className="text-xs ml-1 font-normal">
-                  ({formData.salePrice > 0 ? (((formData.salePrice - (formData.costPrice ?? 0)) / formData.salePrice) * 100).toFixed(1) : 0}%)
-                </span>
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      <ProfitPreview
+        price={formData.price}
+        costPrice={formData.costPrice ?? 0}
+        salePrice={formData.salePrice}
+      />
 
       <Button
         type="submit"

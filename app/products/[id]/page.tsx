@@ -3,12 +3,9 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useProduct, useCreateVariant, useUpdateVariant, useDeleteProduct, useDeleteVariant } from "@/lib/hooks";
-import { variantSchema } from "@/lib/schemas";
+import { useProduct, useDeleteProduct, useDeleteVariant } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,7 +21,6 @@ import {
   Plus,
   Package,
   Pencil,
-  Save,
   X,
   Trash2,
 } from "lucide-react";
@@ -37,8 +33,6 @@ export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: product, isLoading } = useProduct(id);
-  const createVariant = useCreateVariant();
-  const updateVariant = useUpdateVariant();
   const deleteProduct = useDeleteProduct();
   const deleteVariant = useDeleteVariant();
 
@@ -240,7 +234,12 @@ export default function ProductDetailPage() {
                   <div className="flex items-center justify-between pt-1">
                     <div className="text-sm">
                       <span className="text-muted-foreground">Stock: </span>
-                      <span className="font-medium">{variant.currentStock}</span>
+                      <span className="font-medium">{(variant.currentStock - ((variant as ProductVariant & { reservedStock?: number }).reservedStock || 0))} available</span>
+                      {((variant as ProductVariant & { reservedStock?: number }).reservedStock || 0) > 0 && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({(variant as ProductVariant & { reservedStock?: number }).reservedStock} reserved)
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground">Low at: </span>

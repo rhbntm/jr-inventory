@@ -9,6 +9,8 @@ import type {
   LowStockItem,
   BatchWithMovements,
   BatchAnalytics,
+  ReservationWithDetails,
+  AvailableStockResponse,
 } from "./types";
 import type { ProductVariant } from "@prisma/client";
 import type {
@@ -18,6 +20,8 @@ import type {
   BatchInput,
   BatchProcessInput,
   EstimateInput,
+  CreateReservationInput,
+  UpdateReservationInput,
 } from "./schemas";
 
 export const queryKeys = {
@@ -26,6 +30,8 @@ export const queryKeys = {
   product: (id: string) => ["products", id] as const,
   movements: (params?: Record<string, unknown>) => ["movements", params] as const,
   categories: ["categories"] as const,
+  reservations: (params?: Record<string, unknown>) => ["reservations", params] as const,
+  availableStock: (variantId: string) => ["availableStock", variantId] as const,
 };
 
 export const batchQueryKeys = {
@@ -294,5 +300,54 @@ export function useBatchAnalytics() {
   return useQuery({
     queryKey: batchQueryKeys.analytics,
     queryFn: () => apiFetch<BatchAnalytics>("/api/batches/analytics"),
+  });
+}
+
+// ─── Reservations ────────────────────────────────────────────────────────────
+
+export function useReservations(params: Record<string, unknown> = {}) {
+  return useQuery({
+    queryKey: queryKeys.reservations(params),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<ReservationWithDetails>>(`/api/reservations?${buildQuery(params)}`),
+  });
+}
+
+export function useCreateReservation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateReservationInput) =>
+      apiFetch<ReservationWithDetails>("/api/reservations", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.availableStock(variables.variantId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useUpdateReservation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateReservationInput }) =>
+      apiFetch<ReservationWithDetails>(`/api/reservations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.availableStock(data.variantId) });
+      if (data.state === "SHIPPED" || data.state === "RETURNED") {
+        qc.invalidateQueries({ queryKey: ["movements"] });
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useAvailableStock(variantId: string) {
+  return useQuery({
+    queryKey: queryKeys.availableStock(variantId),
+    queryFn: () => apiFetch<AvailableStockResponse>(`/api/reservations/available-stock/${variantId}`),
+    enabled: !!variantId,
   });
 }

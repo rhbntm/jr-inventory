@@ -127,6 +127,7 @@ export default function QuickStockPage() {
 
       // Add to session history
       const newMovement: SessionMovement = {
+        // eslint-disable-next-line react-hooks/purity
         id: Date.now().toString(),
         productName: selectedVariant?.productName ?? "Unknown",
         variantDetails: [selectedVariant?.size, selectedVariant?.color, selectedVariant?.sku]

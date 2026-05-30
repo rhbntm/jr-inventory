@@ -35,7 +35,7 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
 
   // Redirect to dashboard if already logged in

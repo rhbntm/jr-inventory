@@ -100,7 +100,7 @@ export default function AnalyticsPage() {
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Excel report exported");
-    } catch (err) {
+    } catch {
       toast.error("Failed to export report");
     }
   };
@@ -370,7 +370,7 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Today's Activity</CardTitle>
+            <CardTitle className="text-sm">Today&apos;s Activity</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (

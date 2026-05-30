@@ -36,7 +36,7 @@ function StatCard({
 }: {
   title: string;
   value: number | string;
-  icon: any;
+  icon: React.ElementType;
   loading: boolean;
 }) {
   return (
@@ -57,7 +57,7 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { data, isLoading, isError } = useDashboard();
+  const { data, isLoading } = useDashboard();
   const { data: analytics, isLoading: analyticsLoading } = useBatchAnalytics();
 
   const stats = data?.stats;

@@ -75,6 +75,7 @@ export type LowStockItem = {
   color: string | null;
   fabric: string | null;
   currentStock: number;
+  reservedStock?: number;
   lowStockAt: number;
 };
 
@@ -118,3 +119,21 @@ export type BatchAnalytics = {
     damagePercent: number;
   }[];
 };
+
+export type ReservationWithDetails = Prisma.ReservationGetPayload<{
+  include: {
+    variant: {
+      include: {
+        product: true;
+      };
+    };
+    user: true;
+  };
+}>;
+
+export type AvailableStockResponse = {
+  currentStock: number;
+  reservedStock: number;
+  availableStock: number;
+};
+

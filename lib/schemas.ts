@@ -66,3 +66,17 @@ export type BatchInput = z.infer<typeof batchSchema>;
 export type EstimateInput = z.infer<typeof estimateSchema>;
 export type BatchProcessInput = z.infer<typeof batchProcessSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
+
+export const createReservationSchema = z.object({
+  variantId: z.string().min(1, "Variant ID is required"),
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  customerName: z.string().trim().nullable().optional(),
+});
+
+export const updateReservationSchema = z.object({
+  action: z.enum(["ship", "deliver", "release", "return", "cancel"]),
+  restock: z.boolean().optional(),
+});
+
+export type CreateReservationInput = z.infer<typeof createReservationSchema>;
+export type UpdateReservationInput = z.infer<typeof updateReservationSchema>;

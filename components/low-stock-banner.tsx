@@ -19,8 +19,12 @@ export function LowStockBanner() {
   if (lowStockCount === 0) return null;
 
   // Separate out of stock from low stock
-  const outOfStock = lowStockItems.filter((item) => item.currentStock === 0);
-  const lowStock = lowStockItems.filter((item) => item.currentStock > 0 && item.currentStock <= item.lowStockAt);
+  const outOfStock = lowStockItems.filter((item) => (item.currentStock - (item.reservedStock || 0)) === 0);
+  const lowStock = lowStockItems.filter(
+    (item) =>
+      (item.currentStock - (item.reservedStock || 0)) > 0 &&
+      (item.currentStock - (item.reservedStock || 0)) <= item.lowStockAt
+  );
 
   return (
     <div className={cn(
@@ -90,7 +94,7 @@ export function LowStockBanner() {
                         ({[item.size, item.color].filter(Boolean).join(" / ")})
                       </span>
                     )}
-                    <span className="ml-1 font-mono">{item.currentStock} left</span>
+                    <span className="ml-1 font-mono">{(item.currentStock - (item.reservedStock || 0))} left</span>
                   </Badge>
                 ))}
                 {lowStock.length > 5 && (

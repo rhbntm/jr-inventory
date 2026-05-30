@@ -16,6 +16,8 @@ import {
   LogOut,
   User,
   Layers,
+  CalendarPlus,
+  CalendarCheck2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,8 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/stock", label: "Quick Stock", icon: Zap },
+  { href: "/quick-reserve", label: "Quick Reserve", icon: CalendarPlus },
+  { href: "/reservations", label: "Reservations", icon: CalendarCheck2 },
   { href: "/products", label: "Products", icon: Package },
   { href: "/batches", label: "Batches", icon: Layers },
   { href: "/movements", label: "Movements", icon: ArrowLeftRight },
@@ -31,7 +35,7 @@ const navItems = [
   { href: "/export", label: "Export", icon: Download },
 ];
 
-function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: any }) {
+function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(`${href}/`);
 

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import type { DashboardStats, LowStockItem } from '@/lib/types';
+import type { DashboardStats } from '@/lib/types';
 
 export class DashboardRepo {
   private static async getLowStockVariants() {

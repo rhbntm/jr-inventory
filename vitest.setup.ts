@@ -5,6 +5,9 @@ import { db } from '@/lib/db';
 
 async function cleanup() {
   try {
+    await db.reservation.deleteMany();
+  } catch {}
+  try {
     await db.stockMovement.deleteMany();
   } catch {}
   try {

@@ -65,4 +65,51 @@ export class MovementRepo {
 
     return movement;
   }
+
+  /**
+   * Get filtered, paginated stock movements.
+   */
+  static async getMovements(filters: {
+    variantId?: string;
+    productId?: string;
+    type?: "IN" | "OUT" | "ADJUSTMENT" | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = Math.max(1, filters.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 30));
+
+    const where = {
+      ...(filters.variantId && { variantId: filters.variantId }),
+      ...(filters.productId && { variant: { productId: filters.productId } }),
+      ...(filters.type && { type: filters.type }),
+      ...((filters.startDate || filters.endDate) && {
+        createdAt: {
+          ...(filters.startDate && { gte: new Date(filters.startDate) }),
+          ...(filters.endDate && { lte: new Date(filters.endDate) }),
+        },
+      }),
+    };
+
+    const [movements, total] = await db.$transaction([
+      db.stockMovement.findMany({
+        where,
+        include: { variant: { include: { product: true } }, user: true },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      db.stockMovement.count({ where }),
+    ]);
+
+    return {
+      data: movements,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
 }

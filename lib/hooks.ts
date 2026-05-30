@@ -263,12 +263,12 @@ export function useCreateBatch() {
   });
 }
 
-export function useProcessBatch(id: string) {
+export function useProcessBatch() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: BatchProcessInput) =>
+    mutationFn: ({ id, data }: { id: string; data: BatchProcessInput }) =>
       apiFetch<BatchWithMovements>(`/api/batches/${id}/process`, { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: batchQueryKeys.all });
       qc.invalidateQueries({ queryKey: batchQueryKeys.detail(id) });
       qc.invalidateQueries({ queryKey: ["products"] });

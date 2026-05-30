@@ -112,7 +112,7 @@ export type PaginatedResponse<T> = {
   totalPages: number;
 };
 
-export type ApiError = {
+export type ApiErrorResponse = {
   error: string;
   details?: string;
 };

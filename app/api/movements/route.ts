@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { movementSchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
-import { ApiError } from "@/lib/errors";
 import { requireAuth } from "@/lib/auth";
 import { MovementRepo } from "@/app/repositories/movementRepo";
 
@@ -18,30 +16,17 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? 30)));
 
-  const where = {
-    ...(variantId && { variantId }),
-    ...(productId && { variant: { productId } }),
-    ...(type && { type }),
-    ...((startDate || endDate) && {
-      createdAt: {
-        ...(startDate && { gte: new Date(startDate) }),
-        ...(endDate && { lte: new Date(endDate) }),
-      },
-    }),
-  };
+  const result = await MovementRepo.getMovements({
+    variantId,
+    productId,
+    type,
+    startDate,
+    endDate,
+    page,
+    pageSize,
+  });
 
-  const [movements, total] = await db.$transaction([
-    db.stockMovement.findMany({
-      where,
-      include: { variant: { include: { product: true } }, user: true },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    db.stockMovement.count({ where }),
-  ]);
-
-  return NextResponse.json({ data: movements, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+  return NextResponse.json(result);
 });
 
 // POST /api/movements — atomically creates movement + updates currentStock

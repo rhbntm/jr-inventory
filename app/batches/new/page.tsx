@@ -597,8 +597,7 @@ export default function NewBatchPage() {
 
   const createBatch = useCreateBatch();
   const estimateQty = useEstimateQty();
-  // processHook is only instantiated when we have an id
-  const processBatch = useProcessBatch(batchId ?? "");
+  const processBatch = useProcessBatch();
 
   const isSubmitting = createBatch.isPending || processBatch.isPending;
 
@@ -635,15 +634,18 @@ export default function NewBatchPage() {
 
       // Step B: Process the batch with assignments
       await processBatch.mutateAsync({
-        assignments: assignments
-          .filter((a) => Number(a.quantity) > 0)
-          .map((a) => ({
-            variantId: a.variantId,
-            quantity: Number(a.quantity),
-            costPerUnit: a.costPerUnit ? Number(a.costPerUnit) : null,
-          })),
-        damagedQty: Number(damage.damagedQty) || 0,
-        actualQty: weigh.estimatedQty ?? undefined,
+        id,
+        data: {
+          assignments: assignments
+            .filter((a) => Number(a.quantity) > 0)
+            .map((a) => ({
+              variantId: a.variantId,
+              quantity: Number(a.quantity),
+              costPerUnit: a.costPerUnit ? Number(a.costPerUnit) : null,
+            })),
+          damagedQty: Number(damage.damagedQty) || 0,
+          actualQty: weigh.estimatedQty ?? undefined,
+        },
       });
 
       toast.success("Batch saved and stock updated!");

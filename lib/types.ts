@@ -26,32 +26,6 @@ export type MovementWithDetails = Prisma.StockMovementGetPayload<{
   };
 }>;
 
-export type CreateProductInput = {
-  name: string;
-  description?: string | null;
-  categoryId?: string | null;
-};
-
-export type CreateVariantInput = {
-  productId: string;
-  sku?: string | null;
-  size?: string | null;
-  color?: string | null;
-  fabric?: string | null;
-  costPrice?: number;  // Cost to buy from supplier
-  price: number;       // Normal selling price
-  salePrice?: number | null; // Optional promotional price
-  lowStockAt?: number;
-};
-
-export type CreateMovementInput = {
-  variantId: string;
-  type: "IN" | "OUT" | "ADJUSTMENT";
-  quantity: number;
-  priceAtMovement?: number | null;
-  note?: string | null;
-};
-
 export type DashboardStats = {
   totalProducts: number;
   totalVariants: number;

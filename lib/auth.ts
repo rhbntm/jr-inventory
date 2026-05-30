@@ -131,6 +131,10 @@ export async function requireAuth() {
   return session;
 }
 
+/**
+ * requireRole checks if the authenticated user has one of the allowed roles.
+ * Currently unused, but preserved and documented for future role-gating requirements (e.g. Owner vs Partner access).
+ */
 export async function requireRole(...allowedRoles: Array<"OWNER" | "PARTNER">) {
   const session = await requireAuth();
   const userRole = session.user.role as "OWNER" | "PARTNER";

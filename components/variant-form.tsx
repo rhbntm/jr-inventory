@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useCreateVariant, useUpdateVariant } from "@/lib/hooks";
-import { variantSchema } from "@/lib/schemas";
-import type { CreateVariantInput } from "@/lib/types";
+import { variantSchema, type VariantInput } from "@/lib/schemas";
 import type { ProductVariant } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +29,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
   const isEditing = !!variant;
   const createVariant = useCreateVariant();
   const updateVariant = useUpdateVariant();
-  const [formData, setFormData] = useState<CreateVariantInput>({
+  const [formData, setFormData] = useState<VariantInput>({
     productId,
     sku: "",
     size: undefined,

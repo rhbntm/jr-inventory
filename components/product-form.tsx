@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useCategories, useCreateProduct, useUpdateProduct } from "@/lib/hooks";
-import { productSchema } from "@/lib/schemas";
-import type { ProductWithVariants, CreateProductInput } from "@/lib/types";
+import { productSchema, type ProductInput } from "@/lib/schemas";
+import type { ProductWithVariants } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
 
-  const [formData, setFormData] = useState<CreateProductInput>({
+  const [formData, setFormData] = useState<ProductInput>({
     name: "",
     description: "",
     categoryId: undefined,

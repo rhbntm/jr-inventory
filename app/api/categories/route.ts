@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
+import { categorySchema } from "@/lib/schemas";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
 import { CategoryRepo } from "@/app/repositories/categoryRepo";
-
-const categorySchema = z.object({
-  name: z.string().min(1, "Category name is required").transform(s => s.trim()),
-});
 
 // GET /api/categories — return all categories ordered by name
 export const GET = withErrorHandler(async () => {

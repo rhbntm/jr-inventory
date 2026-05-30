@@ -58,6 +58,11 @@ export const batchProcessSchema = z.object({
   actualQty: z.coerce.number().int().min(0).nullable().optional(),
 });
 
+export const categorySchema = z.object({
+  name: z.string().min(1, "Category name is required").transform(s => s.trim()),
+});
+
 export type BatchInput = z.infer<typeof batchSchema>;
 export type EstimateInput = z.infer<typeof estimateSchema>;
 export type BatchProcessInput = z.infer<typeof batchProcessSchema>;
+export type CategoryInput = z.infer<typeof categorySchema>;

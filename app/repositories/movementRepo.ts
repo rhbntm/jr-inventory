@@ -1,13 +1,13 @@
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
-import type { CreateMovementInput } from '@/lib/types';
+import type { MovementInput } from '@/lib/schemas';
 
 export class MovementRepo {
   /**
    * Creates a stock movement and updates the variant's current stock atomically.
    * Mirrors the logic that currently lives in `app/api/movements/route.ts`.
    */
-  static async createMovement(data: CreateMovementInput, userId: string) {
+  static async createMovement(data: MovementInput, userId: string) {
     const { variantId, type, quantity, priceAtMovement, note } = data;
 
     const variant = await db.productVariant.findUnique({ where: { id: variantId } });

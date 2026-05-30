@@ -4,14 +4,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   ProductWithVariants,
   MovementWithDetails,
-  CreateProductInput,
-  CreateVariantInput,
-  CreateMovementInput,
   PaginatedResponse,
   DashboardStats,
   LowStockItem,
+  BatchWithMovements,
+  BatchAnalytics,
 } from "./types";
 import type { ProductVariant } from "@prisma/client";
+import type {
+  ProductInput,
+  VariantInput,
+  MovementInput,
+  BatchInput,
+  BatchProcessInput,
+  EstimateInput,
+} from "./schemas";
 
 export const queryKeys = {
   dashboard: ["dashboard"] as const,
@@ -19,6 +26,13 @@ export const queryKeys = {
   product: (id: string) => ["products", id] as const,
   movements: (params?: Record<string, unknown>) => ["movements", params] as const,
   categories: ["categories"] as const,
+};
+
+export const batchQueryKeys = {
+  all: ["batches"] as const,
+  list: (params?: Record<string, unknown>) => ["batches", "list", params] as const,
+  detail: (id: string) => ["batches", id] as const,
+  analytics: ["batches", "analytics"] as const,
 };
 
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -76,7 +90,7 @@ export function useProduct(id: string) {
 export function useCreateProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateProductInput) =>
+    mutationFn: (data: ProductInput) =>
       apiFetch<ProductWithVariants>("/api/products", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
   });
@@ -85,7 +99,7 @@ export function useCreateProduct() {
 export function useUpdateProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateProductInput> }) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<ProductInput> }) =>
       apiFetch<ProductWithVariants>(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); },
   });
@@ -103,7 +117,7 @@ export function useDeleteProduct() {
 export function useCreateVariant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateVariantInput) =>
+    mutationFn: (data: VariantInput) =>
       apiFetch("/api/variants", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["products"] });
@@ -115,7 +129,7 @@ export function useCreateVariant() {
 export function useUpdateVariant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<CreateVariantInput> }) =>
+    mutationFn: ({ id, data }: { id: string; data: Partial<VariantInput> }) =>
       apiFetch<ProductVariant & { productId: string }>(`/api/variants/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -137,7 +151,6 @@ export function useDeleteVariant() {
       qc.invalidateQueries({ queryKey: ["products"] });
       // Note: We don't have the productId here easily unless we pass it to the hook,
       // but invalidating "products" and all "product" queries is safer.
-      qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }
@@ -164,7 +177,7 @@ export function useMovements(params: MovementsParams = {}) {
 export function useCreateMovement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: CreateMovementInput) =>
+    mutationFn: (data: MovementInput) =>
       apiFetch<MovementWithDetails>("/api/movements", { method: "POST", body: JSON.stringify(data) }),
     onMutate: async (newMovement) => {
       // Cancel outgoing refetches
@@ -225,16 +238,6 @@ export function useCategories() {
 }
 
 // ─── Batches ─────────────────────────────────────────────────────────────────
-
-import type { BatchWithMovements, BatchAnalytics } from "./types";
-import type { BatchInput, BatchProcessInput, EstimateInput } from "./schemas";
-
-export const batchQueryKeys = {
-  all: ["batches"] as const,
-  list: (params?: Record<string, unknown>) => ["batches", "list", params] as const,
-  detail: (id: string) => ["batches", id] as const,
-  analytics: ["batches", "analytics"] as const,
-};
 
 export function useBatches(params: { page?: number; pageSize?: number } = {}) {
   return useQuery({

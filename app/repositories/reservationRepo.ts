@@ -58,14 +58,32 @@ export class ReservationRepo {
     options?: { restock?: boolean }
   ) {
     return await db.$transaction(async (tx) => {
-      const reservation = await tx.reservation.findUnique({
-        where: { id },
-        include: { variant: true },
-      });
+      const raw = await tx.$queryRaw<Array<{id: string, state: ReservationState, quantity: number, variantId: string, currentStock: number, reservedStock: number, price: number, costPrice: number}>>`
+        SELECT r.id, r.state, r.quantity, r."variantId",
+               v."currentStock", v."reservedStock", v.price, v."costPrice"
+        FROM reservations r
+        JOIN product_variants v ON v.id = r."variantId"
+        WHERE r.id = ${id}
+        FOR UPDATE
+      `;
 
-      if (!reservation) {
+      if (!raw.length) {
         throw new ApiError(404, 'Reservation not found');
       }
+
+      const row = raw[0];
+      const reservation = {
+        id: row.id,
+        state: row.state,
+        quantity: row.quantity,
+        variantId: row.variantId,
+        variant: {
+          price: row.price,
+          costPrice: row.costPrice,
+          currentStock: row.currentStock,
+          reservedStock: row.reservedStock,
+        },
+      };
 
       const { state, quantity, variantId, variant } = reservation;
       const now = new Date();

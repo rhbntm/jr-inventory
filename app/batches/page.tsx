@@ -51,10 +51,8 @@ export default function BatchesPage() {
               ? Math.round((batch.damagedQty / batch.actualQty) * 100)
               : 0;
             return (
-              <Card
-                key={batch.id}
-                className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-              >
+              <Link href={`/batches/${batch.id}`} key={batch.id} className="block">
+                <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -101,6 +99,7 @@ export default function BatchesPage() {
                   </div>
                 </CardContent>
               </Card>
+            </Link>
             );
           })}
         </div>

@@ -170,7 +170,14 @@ export default function ProductDetailPage() {
               <Card key={variant.id}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{variant.sku ?? "No SKU"}</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {variant.sku ?? "No SKU"}
+                      {variant.isArchived && (
+                        <Badge variant="secondary" className="text-[10px] h-5 uppercase tracking-wider bg-muted text-muted-foreground">
+                          Archived
+                        </Badge>
+                      )}
+                    </CardTitle>
                     <div className="flex gap-2">
                       <Button
                         variant="ghost"

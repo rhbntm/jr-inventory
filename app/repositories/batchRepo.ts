@@ -113,12 +113,138 @@ export class BatchRepo {
             costPriceAtMovement: resolvedCostPerUnit,
             note: `Batch #${id.slice(-6)} – ${batch.supplierName ?? 'supplier'}`,
             userId,
+            batchId: id,
           },
         });
       }
     });
 
     // Return the fully-populated batch after processing
+    return db.batch.findUnique({
+      where: { id },
+      include: BATCH_WITH_MOVEMENTS,
+    });
+  }
+
+  /**
+   * Reprocess a batch: reverses old movements, applies new ones,
+   * preserves audit trail via StockMovements, and ensures available stock
+   * doesn't drop below zero.
+   */
+  static async reprocessBatch(id: string, data: BatchProcessInput, userId: string) {
+    const { assignments, damagedQty, actualQty } = data;
+
+    const batch = await db.batch.findUnique({
+      where: { id },
+      include: { movements: true },
+    });
+    if (!batch) throw new ApiError(404, 'Batch not found');
+
+    // Validate all new variant IDs exist
+    const newVariantIds = assignments.map((a) => a.variantId);
+    const oldVariantIds = batch.movements.map((m) => m.variantId);
+    const allVariantIds = Array.from(new Set([...newVariantIds, ...oldVariantIds]));
+
+    const variants = await db.productVariant.findMany({ where: { id: { in: allVariantIds } } });
+    if (variants.length !== allVariantIds.length) {
+      throw new ApiError(422, 'One or more variant IDs are invalid');
+    }
+
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+    // Calculate net deltas
+    const deltas = new Map<string, number>();
+    for (const vId of allVariantIds) deltas.set(vId, 0);
+
+    for (const old of batch.movements) {
+      deltas.set(old.variantId, deltas.get(old.variantId)! - old.quantity);
+    }
+    for (const current of assignments) {
+      deltas.set(current.variantId, deltas.get(current.variantId)! + current.quantity);
+    }
+
+    // Safety check: ensure no variant drops below 0 available stock
+    for (const [vId, delta] of Array.from(deltas.entries())) {
+      const variant = variantMap.get(vId)!;
+      const availableStock = variant.currentStock - variant.reservedStock;
+      if (availableStock + delta < 0) {
+        throw new ApiError(
+          409,
+          `Cannot reprocess: Variant ${variant.sku || vId} would have negative available stock.`
+        );
+      }
+    }
+
+    const computedActualQty = actualQty ?? assignments.reduce((sum, a) => sum + a.quantity, 0);
+
+    await db.$transaction(async (tx) => {
+      // 1. Reverse old movements in audit log (OUT)
+      for (const old of batch.movements) {
+        if (old.quantity <= 0) continue;
+        await tx.stockMovement.create({
+          data: {
+            variantId: old.variantId,
+            type: 'OUT',
+            quantity: old.quantity,
+            priceAtMovement: variantMap.get(old.variantId)?.price ?? 0,
+            costPriceAtMovement: old.costPerUnit,
+            note: `Batch #${id.slice(-6)} Reprocess Reversal`,
+            userId,
+            batchId: id,
+          },
+        });
+      }
+
+      // 2. Delete old BatchMovements
+      await tx.batchMovement.deleteMany({ where: { batchId: id } });
+
+      // 3. Update Batch totals
+      await tx.batch.update({
+        where: { id },
+        data: { actualQty: computedActualQty, damagedQty },
+      });
+
+      // 4. Apply new assignments
+      for (const { variantId, quantity, costPerUnit } of assignments) {
+        if (quantity <= 0) continue;
+
+        const variant = variantMap.get(variantId)!;
+        const resolvedCostPerUnit =
+          costPerUnit != null ? costPerUnit
+          : batch.totalCost && computedActualQty > 0
+            ? Number(batch.totalCost) / computedActualQty
+            : Number(variant.costPrice);
+
+        // Record new BatchMovement
+        await tx.batchMovement.create({
+          data: { batchId: id, variantId, quantity, costPerUnit: resolvedCostPerUnit },
+        });
+
+        // Create new StockMovement (IN)
+        await tx.stockMovement.create({
+          data: {
+            variantId,
+            type: 'IN',
+            quantity,
+            priceAtMovement: Number(variant.price),
+            costPriceAtMovement: resolvedCostPerUnit,
+            note: `Batch #${id.slice(-6)} Reprocess – ${batch.supplierName ?? 'supplier'}`,
+            userId,
+            batchId: id,
+          },
+        });
+      }
+
+      // 5. Apply net stock changes
+      for (const [vId, delta] of Array.from(deltas.entries())) {
+        if (delta === 0) continue;
+        await tx.productVariant.update({
+          where: { id: vId },
+          data: { currentStock: { increment: delta } },
+        });
+      }
+    });
+
     return db.batch.findUnique({
       where: { id },
       include: BATCH_WITH_MOVEMENTS,

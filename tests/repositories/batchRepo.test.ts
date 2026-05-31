@@ -1,0 +1,104 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { BatchRepo } from '@/app/repositories/batchRepo';
+import { db } from '@/lib/db';
+import { ApiError } from '@/lib/errors';
+
+// Mock Prisma client
+vi.mock('@/lib/db', () => {
+  return {
+    db: {
+      $transaction: vi.fn(),
+      batch: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        findMany: vi.fn(),
+        count: vi.fn(),
+      },
+      productVariant: {
+        findMany: vi.fn(),
+        update: vi.fn(),
+      },
+      batchMovement: {
+        create: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+      stockMovement: {
+        create: vi.fn(),
+      },
+    },
+  };
+});
+
+describe('BatchRepo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('reprocessBatch', () => {
+    it('throws ApiError if variant would have negative available stock', async () => {
+      const mockBatch = {
+        id: 'b1',
+        movements: [
+          { variantId: 'v1', quantity: 10, costPerUnit: 100 },
+        ],
+      };
+      
+      (db.batch.findUnique as any).mockResolvedValueOnce(mockBatch);
+      // Current stock is 10, reserved is 5. Available is 5.
+      // Net change is 1 - 10 = -9.
+      // 5 - 9 = -4 (invalid).
+      (db.productVariant.findMany as any).mockResolvedValueOnce([
+        { id: 'v1', currentStock: 10, reservedStock: 5, price: 200, costPrice: 100 },
+      ]);
+
+      const data = {
+        assignments: [
+          { variantId: 'v1', quantity: 1, costPerUnit: 100 },
+        ],
+        damagedQty: 0,
+        actualQty: 1,
+      };
+
+      await expect(BatchRepo.reprocessBatch('b1', data, 'u1'))
+        .rejects
+        .toThrowError(ApiError);
+    });
+
+    it('processes successfully if stock remains non-negative', async () => {
+      const mockBatch = {
+        id: 'b1',
+        movements: [
+          { variantId: 'v1', quantity: 10, costPerUnit: 100 },
+        ],
+      };
+      
+      (db.batch.findUnique as any).mockResolvedValueOnce(mockBatch);
+      // Available stock = 15 - 5 = 10. Net delta = 5 - 10 = -5. Final available = 5. (Valid)
+      (db.productVariant.findMany as any).mockResolvedValueOnce([
+        { id: 'v1', currentStock: 15, reservedStock: 5, price: 200, costPrice: 100 },
+      ]);
+
+      (db.$transaction as any).mockImplementationOnce(async (callback: any) => {
+        return callback(db);
+      });
+
+      (db.batch.findUnique as any).mockResolvedValueOnce({ ...mockBatch, id: 'b1_done' });
+
+      const data = {
+        assignments: [
+          { variantId: 'v1', quantity: 5, costPerUnit: 100 }, 
+        ],
+        damagedQty: 0,
+        actualQty: 5,
+      };
+
+      const result = await BatchRepo.reprocessBatch('b1', data, 'u1');
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('b1_done');
+      expect(db.batchMovement.deleteMany).toHaveBeenCalledWith({ where: { batchId: 'b1' } });
+      // 1 OUT reversal for old movement, 1 IN for new assignment
+      expect(db.stockMovement.create).toHaveBeenCalledTimes(2); 
+    });
+  });
+});

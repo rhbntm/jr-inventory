@@ -40,6 +40,16 @@ export class VariantRepo {
       );
     }
 
+    const reservationCount = await db.reservation.count({ where: { variantId: id } });
+
+    if (reservationCount > 0) {
+      throw new ApiError(
+        409,
+        "Cannot delete variant with reservation history",
+        { reservationCount, suggestion: "Archive the variant instead, or delete reservations manually if allowed." }
+      );
+    }
+
     await db.productVariant.delete({ where: { id } });
   }
 }

@@ -15,6 +15,9 @@ vi.mock('@/lib/db', () => {
       stockMovement: {
         count: vi.fn(),
       },
+      reservation: {
+        count: vi.fn(),
+      },
     },
   };
 });
@@ -67,12 +70,14 @@ describe('VariantRepo', () => {
   });
 
   describe('deleteVariant', () => {
-    it('deletes variant if no stock movements exist', async () => {
+    it('deletes variant if no stock movements or reservations exist', async () => {
       (db.stockMovement.count as any).mockResolvedValue(0);
+      (db.reservation.count as any).mockResolvedValue(0);
 
       await VariantRepo.deleteVariant('v1');
       
       expect(db.stockMovement.count).toHaveBeenCalledWith({ where: { variantId: 'v1' } });
+      expect(db.reservation.count).toHaveBeenCalledWith({ where: { variantId: 'v1' } });
       expect(db.productVariant.delete).toHaveBeenCalledWith({ where: { id: 'v1' } });
     });
 
@@ -82,6 +87,17 @@ describe('VariantRepo', () => {
       await expect(VariantRepo.deleteVariant('v1')).rejects.toThrowError(ApiError);
       
       expect(db.stockMovement.count).toHaveBeenCalledWith({ where: { variantId: 'v1' } });
+      expect(db.productVariant.delete).not.toHaveBeenCalled();
+    });
+
+    it('throws ApiError if reservation history exists', async () => {
+      (db.stockMovement.count as any).mockResolvedValue(0);
+      (db.reservation.count as any).mockResolvedValue(1);
+
+      await expect(VariantRepo.deleteVariant('v1')).rejects.toThrowError(ApiError);
+      
+      expect(db.stockMovement.count).toHaveBeenCalledWith({ where: { variantId: 'v1' } });
+      expect(db.reservation.count).toHaveBeenCalledWith({ where: { variantId: 'v1' } });
       expect(db.productVariant.delete).not.toHaveBeenCalled();
     });
   });

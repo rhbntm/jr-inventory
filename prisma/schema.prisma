@@ -120,6 +120,7 @@ model ProductVariant {
   currentStock Int      @default(0)
   reservedStock Int     @default(0)
   lowStockAt   Int      @default(5)
+  isArchived   Boolean  @default(false)
   damaged      Boolean  @default(false)                 // Whether this variant is marked as damaged
   damageNote   String?                                  // Reason or description of damage
   createdAt    DateTime @default(now())
@@ -143,10 +144,12 @@ model StockMovement {
   costPriceAtMovement Decimal? @db.Decimal(10, 2)
   note      String?
   userId    String?
+  batchId   String?
   createdAt DateTime     @default(now())
 
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  batch   Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([variantId])
   @@index([createdAt])
@@ -167,6 +170,7 @@ model Batch {
   createdAt    DateTime        @default(now())
 
   movements    BatchMovement[]
+  stockMovements StockMovement[]
 
   @@map("batches")
 }

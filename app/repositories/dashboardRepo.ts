@@ -11,6 +11,7 @@ export class DashboardRepo {
         color: string | null;
         fabric: string | null;
         currentStock: number;
+        reservedStock: number;
         lowStockAt: number;
         price: number;
         productId: string;
@@ -19,12 +20,14 @@ export class DashboardRepo {
     >`
       SELECT
         v.id, v.sku, v.size, v.color, v.fabric,
-        v."currentStock", v."lowStockAt", v.price, v."productId",
+        v."currentStock", v."reservedStock", v."lowStockAt", v.price, v."productId",
         p.name as product_name
       FROM "product_variants" v
       JOIN "products" p ON v."productId" = p.id
-      WHERE v."currentStock" <= v."lowStockAt"
-      ORDER BY v."currentStock" ASC
+      -- We subtract reservedStock to calculate low stock based on available, physical-to-sell stock
+      WHERE (v."currentStock" - v."reservedStock") <= v."lowStockAt"
+        AND v."isArchived" = false
+      ORDER BY (v."currentStock" - v."reservedStock") ASC
       LIMIT 20
     `;
   }
@@ -119,6 +122,7 @@ export class DashboardRepo {
         name: string;
         sku: string | null;
         currentStock: number;
+        reservedStock: number;
         last_out: string | null;
       }>
     >`
@@ -127,17 +131,21 @@ export class DashboardRepo {
         p.name,
         v.sku,
         v."currentStock",
+        v."reservedStock",
         (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
       FROM "product_variants" v
       JOIN "products" p ON v."productId" = p.id
-      WHERE v."currentStock" > 0
+      -- A variant is only slow moving if it has physically available stock to sell
+      -- i.e., current stock minus stock that is locked up in active reservations.
+      WHERE (v."currentStock" - COALESCE(v."reservedStock", 0)) > 0
+        AND v."isArchived" = false
         AND NOT EXISTS (
           SELECT 1 FROM "stock_movements" m
           WHERE m."variantId" = v.id
             AND m."type" = 'OUT'
             AND m."createdAt" >= ${thirtyDaysAgo}
         )
-      ORDER BY v."currentStock" DESC
+      ORDER BY (v."currentStock" - COALESCE(v."reservedStock", 0)) DESC
       LIMIT 5
     `;
   }
@@ -269,6 +277,8 @@ export class DashboardRepo {
         name: item.name,
         sku: item.sku,
         currentStock: item.currentStock,
+        reservedStock: item.reservedStock,
+        availableStock: item.currentStock - Number(item.reservedStock || 0),
         daysSinceLastMovement: diffDays,
       };
     });
@@ -305,6 +315,7 @@ export class DashboardRepo {
       color: v.color,
       fabric: v.fabric,
       currentStock: v.currentStock,
+      reservedStock: v.reservedStock,
       lowStockAt: v.lowStockAt,
     }));
 

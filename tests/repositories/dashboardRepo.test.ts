@@ -37,7 +37,8 @@ describe('DashboardRepo.getDashboardStats', () => {
         size: 'M',
         color: null,
         fabric: null,
-        currentStock: 2,
+        currentStock: 4,
+        reservedStock: 2, // Available stock = 2 <= 5 (lowStockAt)
         lowStockAt: 5,
         price: 100,
         productId: 'p1',
@@ -74,7 +75,7 @@ describe('DashboardRepo.getDashboardStats', () => {
 
     // Mock slow moving items
     (db.$queryRaw as any).mockResolvedValueOnce([
-      { id: 'v2', name: 'Prod 2', sku: 'SKU2', currentStock: 10, last_out: null },
+      { id: 'v2', name: 'Prod 2', sku: 'SKU2', currentStock: 10, reservedStock: 9, last_out: null },
     ]);
 
     // Mock today sales
@@ -108,5 +109,6 @@ describe('DashboardRepo.getDashboardStats', () => {
     expect(result.lowStockItems).toHaveLength(1);
     expect(result.stats.todayRevenue).toBe(1000);
     expect(result.stats.todayProfit).toBe(400);
+    expect(result.stats.slowMovingItems[0].availableStock).toBe(1);
   });
 });

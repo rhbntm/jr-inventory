@@ -9,10 +9,11 @@ type Params = Promise<{ id: string }>;
 
 const updateSchema = productSchema.partial();
 
-export const GET = withErrorHandler(async (_req: NextRequest, { params }: { params: Params }) => {
+export const GET = withErrorHandler(async (req: NextRequest, { params }: { params: Params }) => {
   await requireAuth();
   const { id } = await params;
-  const product = await ProductRepo.getProductWithVariants(id);
+  const showArchived = req.nextUrl.searchParams.get("showArchived") === "true";
+  const product = await ProductRepo.getProductWithVariants(id, showArchived);
 
   if (!product) {
     throw new ApiError(404, "Product not found");

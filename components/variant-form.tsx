@@ -38,6 +38,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
     costPrice: 0,
     price: 0,
     lowStockAt: 5,
+    isArchived: false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -57,6 +58,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
         price: Number(variant.price),
         salePrice: variant.salePrice ? Number(variant.salePrice) : null,
         lowStockAt: variant.lowStockAt,
+        isArchived: variant.isArchived,
       });
     }
   }, [variant, productId]);
@@ -102,6 +104,7 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
           price: 0,
           salePrice: null,
           lowStockAt: 5,
+          isArchived: false,
         });
       }
       onSuccess?.();
@@ -262,6 +265,20 @@ export function VariantForm({ productId, variant, onSuccess }: VariantFormProps)
           />
         </div>
       </div>
+
+      {isEditing && (
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="isArchived"
+            checked={formData.isArchived ?? false}
+            onChange={(e) => setFormData({ ...formData, isArchived: e.target.checked })}
+            disabled={isPending}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <Label htmlFor="isArchived">Archive this variant (hide from active stock operations)</Label>
+        </div>
+      )}
 
       {/* Profit Preview */}
       <ProfitPreview

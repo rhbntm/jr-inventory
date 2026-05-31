@@ -63,6 +63,8 @@ export type DashboardStats = {
     name: string;
     sku: string | null;
     currentStock: number;
+    reservedStock: number;
+    availableStock: number;
     daysSinceLastMovement: number | null;
   }[];
 };

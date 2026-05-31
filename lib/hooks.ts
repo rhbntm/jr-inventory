@@ -75,13 +75,15 @@ type ProductsParams = {
   categoryId?: string;
   page?: number;
   pageSize?: number;
+  showArchived?: boolean;
 };
 
 export function useProducts(params: ProductsParams = {}) {
+  const finalParams = { showArchived: false, ...params };
   return useQuery({
-    queryKey: queryKeys.products(params),
+    queryKey: queryKeys.products(finalParams),
     queryFn: () =>
-      apiFetch<PaginatedResponse<ProductWithVariants>>(`/api/products?${buildQuery(params)}`),
+      apiFetch<PaginatedResponse<ProductWithVariants>>(`/api/products?${buildQuery(finalParams)}`),
   });
 }
 
@@ -276,7 +278,27 @@ export function useProcessBatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: BatchProcessInput }) =>
-      apiFetch<BatchWithMovements>(`/api/batches/${id}/process`, { method: "POST", body: JSON.stringify(data) }),
+      apiFetch<BatchWithMovements>(`/api/batches/${id}/process`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: batchQueryKeys.all });
+      qc.invalidateQueries({ queryKey: batchQueryKeys.detail(id) });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useReprocessBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: BatchProcessInput }) =>
+      apiFetch<BatchWithMovements>(`/api/batches/${id}/reprocess`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: batchQueryKeys.all });
       qc.invalidateQueries({ queryKey: batchQueryKeys.detail(id) });

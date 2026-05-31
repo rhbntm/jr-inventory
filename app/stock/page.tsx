@@ -65,7 +65,9 @@ export default function QuickStockPage() {
 
   // Flatten all variants for search
   const allVariants = productsData?.data.flatMap((product) =>
-    product.variants.map((variant) => ({
+    product.variants
+      .filter((variant) => !variant.isArchived)
+      .map((variant) => ({
       id: variant.id,
       productName: product.name,
       sku: variant.sku,

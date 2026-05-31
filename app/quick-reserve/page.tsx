@@ -62,7 +62,9 @@ export default function QuickReservePage() {
 
   // Flatten variants
   const allVariants = productsData?.data.flatMap((product) =>
-    product.variants.map((variant) => {
+    product.variants
+      .filter((variant) => !variant.isArchived)
+      .map((variant) => {
       const reserved = (variant as ProductVariant & { reservedStock?: number }).reservedStock || 0;
       const available = variant.currentStock - reserved;
       return {

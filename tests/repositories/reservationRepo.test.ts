@@ -91,6 +91,8 @@ describe('ReservationRepo Logic (Integration)', () => {
     expect(movements.length).toBe(1);
     expect(movements[0].type).toBe('OUT');
     expect(movements[0].quantity).toBe(2);
+    expect(movements[0].priceAtMovement?.toNumber()).toBe(100);
+    expect(movements[0].costPriceAtMovement?.toNumber()).toBe(50);
   });
 
   it('cancels reservation and restores reservedStock', async () => {
@@ -130,5 +132,98 @@ describe('ReservationRepo Logic (Integration)', () => {
 
     const updatedVariant = await db.productVariant.findUnique({ where: { id: testVariant.id } });
     expect(updatedVariant?.reservedStock).toBe(fulfilled[0].status === 'fulfilled' ? (fulfilled[0] as any).value.quantity : 0);
+  });
+  it('prevents duplicate state transitions under concurrency', async () => {
+    const res = await ReservationRepo.createReservation({
+      variantId: testVariant.id,
+      quantity: 2,
+    }, testUser.id);
+
+    // Both attempt to transition from RESERVED to SHIPPING.
+    // The second one to acquire the lock will read 'SHIPPING' and throw ApiError.
+    const p1 = ReservationRepo.transitionState(res.id, 'ship', testUser.id);
+    const p2 = ReservationRepo.transitionState(res.id, 'ship', testUser.id);
+
+    const results = await Promise.allSettled([p1, p2]);
+    const fulfilled = results.filter(r => r.status === 'fulfilled');
+    const rejected = results.filter(r => r.status === 'rejected');
+
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    const updatedVariant = await db.productVariant.findUnique({ where: { id: testVariant.id } });
+    const finalRes = await db.reservation.findUnique({ where: { id: res.id } });
+    
+    expect(finalRes?.state).toBe('SHIPPING');
+    expect(updatedVariant?.reservedStock).toBe(2);
+  });
+
+  describe('getReservations', () => {
+    it('returns all reservations when no filters are provided', async () => {
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+      
+      const res = await ReservationRepo.getReservations({});
+      expect(res.data.length).toBe(2);
+      expect(res.total).toBe(2);
+    });
+
+    it('filters by state', async () => {
+      const r1 = await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+      await ReservationRepo.transitionState(r1.id, 'cancel', testUser.id);
+
+      const res = await ReservationRepo.getReservations({ state: 'CANCELLED' });
+      expect(res.data.length).toBe(1);
+      expect(res.data[0].state).toBe('CANCELLED');
+    });
+
+    it('filters by customerName (case insensitive)', async () => {
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1, customerName: 'Alice Smith' }, testUser.id);
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1, customerName: 'Bob Jones' }, testUser.id);
+
+      const res = await ReservationRepo.getReservations({ customerName: 'alice' });
+      expect(res.data.length).toBe(1);
+      expect(res.data[0].customerName).toBe('Alice Smith');
+    });
+
+    it('filters by date range', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const r1 = await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+      
+      await db.reservation.update({
+        where: { id: r1.id },
+        data: { reservedAt: yesterday }
+      });
+
+      await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+
+      const res = await ReservationRepo.getReservations({ endDate: yesterday.toISOString() });
+      expect(res.data.length).toBe(1);
+      expect(res.data[0].id).toBe(r1.id);
+    });
+
+    it('paginates correctly', async () => {
+      // Create 5 reservations with distinct timestamps
+      for (let i = 0; i < 5; i++) {
+        const r = await ReservationRepo.createReservation({ variantId: testVariant.id, quantity: 1 }, testUser.id);
+        const date = new Date();
+        date.setSeconds(date.getSeconds() - i);
+        await db.reservation.update({
+          where: { id: r.id },
+          data: { reservedAt: date }
+        });
+      }
+
+      const page1 = await ReservationRepo.getReservations({ page: 1, pageSize: 3 });
+      expect(page1.data.length).toBe(3);
+      expect(page1.total).toBe(5);
+      expect(page1.totalPages).toBe(2);
+
+      const page2 = await ReservationRepo.getReservations({ page: 2, pageSize: 3 });
+      expect(page2.data.length).toBe(2);
+    });
   });
 });

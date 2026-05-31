@@ -4,7 +4,7 @@ import type { ProductInput } from '@/lib/schemas';
 import { ApiError } from '@/lib/errors';
 
 export class ProductRepo {
-  static async getProducts(search: string = "", categoryId?: string, page: number = 1, pageSize: number = 20) {
+  static async getProducts(search: string = "", categoryId?: string, showArchived: boolean = false, page: number = 1, pageSize: number = 20) {
     const where = {
       ...(search && { name: { contains: search, mode: "insensitive" as const } }),
       ...(categoryId && { categoryId }),
@@ -13,7 +13,13 @@ export class ProductRepo {
     const [products, total] = await db.$transaction([
       db.product.findMany({
         where,
-        include: { category: true, variants: { orderBy: { createdAt: "asc" } } },
+        include: { 
+          category: true, 
+          variants: { 
+            where: showArchived ? undefined : { isArchived: false },
+            orderBy: { createdAt: "asc" } 
+          } 
+        },
         orderBy: { updatedAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -62,10 +68,16 @@ export class ProductRepo {
   /**
    * Retrieves a product together with its variants.
    */
-  static async getProductWithVariants(productId: string): Promise<ProductWithVariants | null> {
+  static async getProductWithVariants(productId: string, showArchived: boolean = false): Promise<ProductWithVariants | null> {
     return db.product.findUnique({
       where: { id: productId },
-      include: { category: true, variants: { orderBy: { createdAt: "asc" } } },
+      include: { 
+        category: true, 
+        variants: { 
+          where: showArchived ? undefined : { isArchived: false },
+          orderBy: { createdAt: "asc" } 
+        } 
+      },
     }) as Promise<ProductWithVariants | null>;
   }
 

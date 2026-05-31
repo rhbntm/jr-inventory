@@ -13,6 +13,7 @@ export const variantSchema = z.object({
   price: z.coerce.number().min(0, "Selling price must be non-negative"),
   salePrice: z.coerce.number().min(0, "Sale price must be non-negative").nullable().optional(),
   lowStockAt: z.coerce.number().int().min(0, "Low stock threshold must be non-negative").default(5),
+  isArchived: z.boolean().optional(),
 });
 
 export const productSchema = z.object({

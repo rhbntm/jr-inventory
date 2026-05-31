@@ -14,9 +14,8 @@ export function LowStockBanner() {
   if (dismissed) return null;
 
   const lowStockItems = data?.lowStockItems ?? [];
-  const lowStockCount = data?.stats.lowStockCount ?? 0;
 
-  if (lowStockCount === 0) return null;
+  if (lowStockItems.length === 0) return null;
 
   // Separate out of stock from low stock
   const outOfStock = lowStockItems.filter((item) => (item.currentStock - (item.reservedStock || 0)) === 0);
@@ -46,7 +45,7 @@ export function LowStockBanner() {
             )}>
               {outOfStock.length > 0
                 ? `${outOfStock.length} item(s) out of stock`
-                : `${lowStockCount} item(s) with low stock`}
+                : `${lowStock.length} item(s) with low stock`}
             </h3>
             <Badge variant={outOfStock.length > 0 ? "destructive" : "secondary"}>
               Attention Needed

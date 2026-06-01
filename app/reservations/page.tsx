@@ -46,6 +46,8 @@ import {
   Search,
   RotateCcw,
   CalendarCheck2,
+  Printer,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
@@ -411,6 +413,32 @@ export default function ReservationsPage() {
                           <Undo2 className="h-3.5 w-3.5 mr-1" />
                           Return
                         </Button>
+                      )}
+                      {["RESERVED", "SHIPPING", "SHIPPED"].includes(res.state) && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 h-8 px-2"
+                            onClick={() => window.open(`/api/reservations/${res.id}/receipt`, "_blank")}
+                            title="Print Receipt"
+                          >
+                            <Printer className="h-3.5 w-3.5 mr-1" />
+                            Receipt
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 h-8 px-2"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/reservations/${res.id}/receipt`);
+                              toast.success("Receipt link copied");
+                            }}
+                            title="Copy Receipt Link"
+                          >
+                            <Link2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
                       )}
                       {["RELEASED", "RETURNED", "CANCELLED"].includes(res.state) && (
                         <span className="text-xs text-muted-foreground px-2">Terminal</span>

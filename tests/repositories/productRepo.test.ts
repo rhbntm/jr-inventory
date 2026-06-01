@@ -36,7 +36,7 @@ describe('ProductRepo', () => {
       const mockProducts = [{ id: '1', name: 'Product A' }];
       (db.$transaction as any).mockResolvedValue([mockProducts, 1]);
 
-      const result = await ProductRepo.getProducts('Product', 'cat-1', 1, 10);
+      const result = await ProductRepo.getProducts('Product', 'cat-1', false, 1, 10);
       
       expect(db.$transaction).toHaveBeenCalled();
       expect(result.data).toEqual(mockProducts);

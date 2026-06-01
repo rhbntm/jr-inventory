@@ -25,7 +25,7 @@ ENV PORT=3000
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget postgresql17-client
 
 # Ensure the app directory is owned by nextjs
 RUN chown -R nextjs:nodejs /app

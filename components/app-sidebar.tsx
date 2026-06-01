@@ -18,6 +18,7 @@ import {
   Layers,
   CalendarPlus,
   CalendarCheck2,
+  Settings,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/movements", label: "Movements", icon: ArrowLeftRight },
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/export", label: "Export", icon: Download },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {

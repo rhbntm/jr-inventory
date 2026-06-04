@@ -25,7 +25,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "J&R Inventory",
   description: "Inventory management system",
-  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/icon-192x192.png",
+    shortcut: "/icons/icon-192x192.png",
+    apple: "/icons/icon-192x192.png",
+  },
   appleWebApp: {
     capable: true,
     title: "J&R Inventory",

@@ -25,7 +25,6 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "J&R Inventory",
   description: "Inventory management system",
-  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "J&R Inventory",

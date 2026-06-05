@@ -63,10 +63,53 @@ export const categorySchema = z.object({
   name: z.string().min(1, "Category name is required").transform(s => s.trim()),
 });
 
+export const manualBatchSchema = z.object({
+  header: z.object({
+    supplierName: z.string().trim().nullable().optional(),
+    purchaseDate: z.coerce.date().nullable().optional(),
+    totalCost: z.coerce.number().min(0),
+    estimatedQty: z.coerce.number().int().min(0),
+    category: z.string().trim().nullable().optional(),
+    notes: z.string().trim().nullable().optional(),
+  }),
+  variantMode: z.enum(["EXISTING", "NEW"]),
+  variant: z.object({
+    existingId: z.string().nullable().optional(), // Used if EXISTING
+    productName: z.string().trim().nullable().optional(), // Used if NEW
+    sku: z.string().trim().nullable().optional(),
+    size: z.string().trim().nullable().optional(),
+    color: z.string().trim().nullable().optional(),
+    fabric: z.string().trim().nullable().optional(),
+    price: z.coerce.number().min(0).nullable().optional(), // Manually set or auto-calculated
+  }).optional(),
+  tally: z.object({
+    good: z.coerce.number().int().min(0).default(0),
+    stained: z.coerce.number().int().min(0).default(0),
+    damaged: z.coerce.number().int().min(0).default(0),
+  }),
+});
+
+export const settingsMarkupSchema = z.object({
+  markupPercent: z.coerce.number().min(0),
+  fixedMarkup: z.coerce.number().min(0),
+});
+
 export type BatchInput = z.infer<typeof batchSchema>;
 export type EstimateInput = z.infer<typeof estimateSchema>;
 export type BatchProcessInput = z.infer<typeof batchProcessSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
+export type ManualBatchInput = z.infer<typeof manualBatchSchema>;
+export type SettingsMarkupInput = z.infer<typeof settingsMarkupSchema>;
+
+export const conditionAdjustSchema = z.object({
+  toStained: z.coerce.number().int().min(0).default(0),
+  toDamaged: z.coerce.number().int().min(0).default(0),
+  note: z.string().trim().nullable().optional(),
+}).refine(d => d.toStained + d.toDamaged > 0, {
+  message: "At least one unit must be transferred",
+});
+
+export type ConditionAdjustInput = z.infer<typeof conditionAdjustSchema>;
 
 export const createReservationSchema = z.object({
   variantId: z.string().min(1, "Variant ID is required"),

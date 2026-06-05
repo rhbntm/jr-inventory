@@ -119,6 +119,8 @@ model ProductVariant {
   salePrice    Decimal? @db.Decimal(10, 2)              // Promotional price
   currentStock Int      @default(0)
   reservedStock Int     @default(0)
+  stainedStock  Int     @default(0)
+  damagedStock  Int     @default(0)
   lowStockAt   Int      @default(5)
   isArchived   Boolean  @default(false)
   damaged      Boolean  @default(false)                 // Whether this variant is marked as damaged
@@ -165,6 +167,7 @@ model Batch {
   estimatedQty Int?
   actualQty    Int?
   damagedQty   Int?            @default(0)
+  stainedQty   Int?            @default(0)
   category     String?
   notes        String?
   createdAt    DateTime        @default(now())
@@ -211,4 +214,11 @@ model Reservation {
   @@index([state])
   @@index([reservedAt])
   @@map("reservations")
+}
+
+model Settings {
+  key   String  @id
+  value String
+
+  @@map("settings")
 }

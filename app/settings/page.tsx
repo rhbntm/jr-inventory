@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { useMarkupSettings, useUpdateMarkupSettings } from "@/lib/hooks";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Download, AlertTriangle, DatabaseBackup, Trash2 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -15,8 +16,30 @@ export default function SettingsPage() {
   const [confirmText, setConfirmText] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Markup Settings state
+  const { data: markupData, isLoading: isMarkupLoading } = useMarkupSettings();
+  const updateMarkup = useUpdateMarkupSettings();
+  
+  const [markupPercentInput, setMarkupPercentInput] = useState<string | null>(null);
+  const [fixedMarkupInput, setFixedMarkupInput] = useState<string | null>(null);
+
+  const markupPercent = markupPercentInput ?? markupData?.markupPercent?.toString() ?? "";
+  const fixedMarkup = fixedMarkupInput ?? markupData?.fixedMarkup?.toString() ?? "";
 
   const isOwner = session?.user?.role === "OWNER";
+
+  const handleSaveMarkup = async () => {
+    try {
+      await updateMarkup.mutateAsync({
+        markupPercent: Number(markupPercent) || 0,
+        fixedMarkup: Number(fixedMarkup) || 0,
+      });
+      toast.success("Markup settings saved successfully");
+    } catch {
+      toast.error("Failed to save markup settings");
+    }
+  };
 
   const handleBackup = () => {
     // Simply opening the URL will trigger the file download
@@ -47,8 +70,9 @@ export default function SettingsPage() {
 
       toast.success("Inventory reset successfully");
       setIsDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.message || "An error occurred");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message || "An error occurred");
     } finally {
       setIsResetting(false);
     }
@@ -106,6 +130,51 @@ export default function SettingsPage() {
             <Button variant="destructive" onClick={() => openResetDialog("STOCK")} className="w-full sm:w-auto">
               <Trash2 className="mr-2 h-4 w-4" />
               Reset Stock & History
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Markup Settings Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DatabaseBackup className="h-5 w-5" /> {/* Re-using icon for now, could be something else like Percent or Tag */}
+              Markup Settings
+            </CardTitle>
+            <CardDescription>
+              Configure default markup values used to auto-calculate the selling price for new variants created during manual tally.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Markup Percentage (%)</label>
+                <Input 
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={markupPercent}
+                  onChange={(e) => setMarkupPercentInput(e.target.value)}
+                  disabled={isMarkupLoading || updateMarkup.isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Fixed Markup (₱)</label>
+                <Input 
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={fixedMarkup}
+                  onChange={(e) => setFixedMarkupInput(e.target.value)}
+                  disabled={isMarkupLoading || updateMarkup.isPending}
+                />
+              </div>
+            </div>
+            <Button 
+              onClick={handleSaveMarkup} 
+              disabled={isMarkupLoading || updateMarkup.isPending}
+            >
+              {updateMarkup.isPending ? "Saving..." : "Save Settings"}
             </Button>
           </CardContent>
         </Card>

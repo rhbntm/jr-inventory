@@ -20,3 +20,22 @@ export const db =
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+
+// Seed default settings on startup
+(async () => {
+  try {
+    const defaultSettings = [
+      { key: "markupPercent", value: "25" },
+      { key: "fixedMarkup", value: "5" },
+    ];
+    for (const setting of defaultSettings) {
+      await db.settings.upsert({
+        where: { key: setting.key },
+        update: {},
+        create: setting,
+      });
+    }
+  } catch (error) {
+    console.error("Failed to seed default settings:", error);
+  }
+})();

@@ -4,7 +4,8 @@ import { requireRole } from "@/lib/auth";
 import { withErrorHandler } from "@/lib/api-wrapper";
 import { Readable } from "stream";
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const GET = withErrorHandler(async (_req: NextRequest) => {
   await requireRole("OWNER");
 
   const dbUrl = process.env.DATABASE_URL;

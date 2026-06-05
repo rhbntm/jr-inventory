@@ -56,6 +56,149 @@ export class BatchRepo {
   }
 
   /**
+   * Create a manual tally batch.
+   * Handles creating the batch, optionally creating a product/variant,
+   * updating stock (current, stained, damaged), and creating stock movements.
+   */
+  static async createManualBatch(data: import('@/lib/schemas').ManualBatchInput, userId: string) {
+    const { header, variantMode, variant: variantData, tally } = data;
+    const actualQty = tally.good + tally.stained + tally.damaged;
+    
+    // Only good and stained share the cost, damaged is pure loss
+    const goodAndStainedQty = tally.good + tally.stained;
+    const costPerUnit = goodAndStainedQty > 0 ? Number(header.totalCost) / goodAndStainedQty : 0;
+
+    return db.$transaction(async (tx) => {
+      let targetVariantId = variantData?.existingId;
+      let priceAtMovement = 0; // will be resolved
+
+      if (variantMode === 'EXISTING') {
+        if (!targetVariantId) throw new ApiError(400, "Existing variant ID required");
+        const existing = await tx.productVariant.findUnique({ where: { id: targetVariantId } });
+        if (!existing) throw new ApiError(404, "Variant not found");
+        
+        priceAtMovement = Number(existing.price);
+        
+      } else {
+        // NEW VARIANT MODE
+        if (!variantData?.productName) throw new ApiError(400, "Product name required for new variant");
+        
+        // Find or create product
+        let product = await tx.product.findFirst({
+          where: { name: { equals: variantData.productName, mode: 'insensitive' } }
+        });
+
+        if (!product) {
+          product = await tx.product.create({
+            data: {
+              name: variantData.productName,
+              categoryId: header.category ? (
+                (await tx.category.findUnique({ where: { name: header.category } }))?.id ?? null
+              ) : null,
+            }
+          });
+        }
+
+        const newPrice = variantData.price ?? 0; // The frontend should calculate and pass this
+        
+        const newVariant = await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: variantData.sku ?? null,
+            size: variantData.size ?? null,
+            color: variantData.color ?? null,
+            fabric: variantData.fabric ?? null,
+            costPrice: costPerUnit,
+            price: newPrice,
+            currentStock: 0,
+            stainedStock: 0,
+            damagedStock: 0,
+          }
+        });
+        
+        targetVariantId = newVariant.id;
+        priceAtMovement = newPrice;
+      }
+
+      // 1. Create Batch
+      const batch = await tx.batch.create({
+        data: {
+          supplierName: header.supplierName ?? null,
+          purchaseDate: header.purchaseDate ?? null,
+          totalCost: header.totalCost ?? null,
+          estimatedQty: header.estimatedQty ?? null,
+          category: header.category ?? null,
+          notes: header.notes ?? null,
+          actualQty: actualQty,
+          damagedQty: tally.damaged,
+          stainedQty: tally.stained,
+        }
+      });
+
+      // 2. Create BatchMovement
+      await tx.batchMovement.create({
+        data: {
+          batchId: batch.id,
+          variantId: targetVariantId,
+          quantity: actualQty,
+          costPerUnit: costPerUnit,
+        }
+      });
+
+      // 3. Update variant stock counters
+      await tx.productVariant.update({
+        where: { id: targetVariantId },
+        data: {
+          currentStock: { increment: tally.good },
+          stainedStock: { increment: tally.stained },
+          damagedStock: { increment: tally.damaged },
+        }
+      });
+
+      // 4. Create Stock Movements
+      
+      // IN movement for GOOD items
+      if (tally.good > 0) {
+        await tx.stockMovement.create({
+          data: {
+            variantId: targetVariantId,
+            type: 'IN',
+            quantity: tally.good,
+            priceAtMovement: priceAtMovement,
+            costPriceAtMovement: costPerUnit,
+            note: `Manual tally – good stock (Batch #${batch.id.slice(-6)})`,
+            userId,
+            batchId: batch.id,
+          }
+        });
+      }
+
+      // NO movement for stained items (they just increment stainedStock)
+
+      // OUT movement for DAMAGED items
+      if (tally.damaged > 0) {
+        await tx.stockMovement.create({
+          data: {
+            variantId: targetVariantId,
+            type: 'OUT',
+            quantity: tally.damaged,
+            priceAtMovement: 0,
+            costPriceAtMovement: 0,
+            note: `Damaged during sorting (Batch #${batch.id.slice(-6)})`,
+            userId,
+            batchId: batch.id,
+          }
+        });
+      }
+
+      return tx.batch.findUnique({
+        where: { id: batch.id },
+        include: BATCH_WITH_MOVEMENTS,
+      });
+    });
+  }
+
+  /**
    * Finalise a batch: records BatchMovements, creates IN StockMovements,
    * and updates variant stock — all within a single transaction.
    */

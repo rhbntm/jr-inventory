@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Package, Calendar, DollarSign } from "lucide-react";
+import { Plus, Package, Calendar, DollarSign, ListTodo } from "lucide-react";
 import Link from "next/link";
 
 export default function BatchesPage() {
@@ -16,12 +16,20 @@ export default function BatchesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Batches</h1>
-        <Link href="/batches/new">
-          <Button id="new-batch-btn">
-            <Plus className="mr-2 h-4 w-4" />
-            New Batch
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/batches/new/manual">
+            <Button id="manual-tally-btn" variant="outline">
+              <ListTodo className="mr-2 h-4 w-4" />
+              Manual Tally
+            </Button>
+          </Link>
+          <Link href="/batches/new">
+            <Button id="new-batch-btn">
+              <Plus className="mr-2 h-4 w-4" />
+              New Batch
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {isLoading ? (
@@ -36,11 +44,18 @@ export default function BatchesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Use the Bale Counting Wizard to receive and record a new stock batch.
             </p>
-            <Link href="/batches/new">
-              <Button id="new-batch-empty-btn">
-                <Plus className="mr-2 h-4 w-4" /> Create First Batch
-              </Button>
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/batches/new/manual">
+                <Button id="manual-tally-empty-btn" variant="outline">
+                  <ListTodo className="mr-2 h-4 w-4" /> Manual Tally
+                </Button>
+              </Link>
+              <Link href="/batches/new">
+                <Button id="new-batch-empty-btn">
+                  <Plus className="mr-2 h-4 w-4" /> Create First Batch
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       ) : (

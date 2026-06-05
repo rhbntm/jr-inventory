@@ -22,6 +22,9 @@ import type {
   EstimateInput,
   CreateReservationInput,
   UpdateReservationInput,
+  ManualBatchInput,
+  SettingsMarkupInput,
+  ConditionAdjustInput,
 } from "./schemas";
 
 export const queryKeys = {
@@ -39,6 +42,10 @@ export const batchQueryKeys = {
   list: (params?: Record<string, unknown>) => ["batches", "list", params] as const,
   detail: (id: string) => ["batches", id] as const,
   analytics: ["batches", "analytics"] as const,
+};
+
+export const settingsQueryKeys = {
+  markup: ["settings", "markup"] as const,
 };
 
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -157,8 +164,25 @@ export function useDeleteVariant() {
     mutationFn: (id: string) => apiFetch(`/api/variants/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
-      // Note: We don't have the productId here easily unless we pass it to the hook,
-      // but invalidating "products" and all "product" queries is safer.
+    },
+  });
+}
+
+export function useAdjustConditionStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: ConditionAdjustInput }) =>
+      apiFetch<ProductVariant & { productId: string }>(`/api/variants/${id}/condition`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      if (data.productId) {
+        qc.invalidateQueries({ queryKey: queryKeys.product(data.productId) });
+      }
+      qc.invalidateQueries({ queryKey: ["movements"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
     },
   });
 }
@@ -274,6 +298,19 @@ export function useCreateBatch() {
   });
 }
 
+export function useCreateManualBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ManualBatchInput) =>
+      apiFetch<BatchWithMovements>("/api/batches/manual", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: batchQueryKeys.all });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
 export function useProcessBatch() {
   const qc = useQueryClient();
   return useMutation({
@@ -371,5 +408,28 @@ export function useAvailableStock(variantId: string) {
     queryKey: queryKeys.availableStock(variantId),
     queryFn: () => apiFetch<AvailableStockResponse>(`/api/reservations/available-stock/${variantId}`),
     enabled: !!variantId,
+  });
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export function useMarkupSettings() {
+  return useQuery({
+    queryKey: settingsQueryKeys.markup,
+    queryFn: () => apiFetch<{ markupPercent: number; fixedMarkup: number }>("/api/settings/markup"),
+  });
+}
+
+export function useUpdateMarkupSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: SettingsMarkupInput) =>
+      apiFetch<{ success: boolean }>("/api/settings/markup", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: settingsQueryKeys.markup });
+    },
   });
 }

@@ -29,6 +29,66 @@ export class VariantRepo {
     });
   }
 
+  /**
+   * Transfer good-condition units to stained or damaged buckets.
+   * Creates an ADJUSTMENT StockMovement for the audit trail.
+   * The total of (toStained + toDamaged) must not exceed available currentStock.
+   */
+  static async adjustConditionStock(
+    id: string,
+    { toStained, toDamaged, note }: { toStained: number; toDamaged: number; note?: string | null },
+    userId: string,
+  ) {
+    const total = toStained + toDamaged;
+    if (total <= 0) throw new ApiError(400, "Nothing to transfer");
+
+    const variant = await db.productVariant.findUnique({ where: { id } });
+    if (!variant) throw new ApiError(404, "Variant not found");
+
+    const available = variant.currentStock - variant.reservedStock;
+    if (available < total) {
+      throw new ApiError(
+        409,
+        `Not enough available stock. Available: ${available}, Requested: ${total}`,
+      );
+    }
+
+    return db.$transaction(async (tx) => {
+      // Decrement good stock and increment condition buckets
+      await tx.productVariant.update({
+        where: { id },
+        data: {
+          currentStock: { decrement: total },
+          stainedStock: { increment: toStained },
+          damagedStock: { increment: toDamaged },
+        },
+      });
+
+      // Write a single ADJUSTMENT movement to record the transfer
+      const parts: string[] = [];
+      if (toStained > 0) parts.push(`${toStained} → Stained`);
+      if (toDamaged > 0) parts.push(`${toDamaged} → Damaged`);
+      const autoNote = `Condition adjustment: ${parts.join(", ")}${note ? ` — ${note}` : ""}`;
+
+      await tx.stockMovement.create({
+        data: {
+          variantId: id,
+          type: "ADJUSTMENT",
+          quantity: total,
+          priceAtMovement: Number(variant.price),
+          costPriceAtMovement: Number(variant.costPrice),
+          note: autoNote,
+          userId,
+        },
+      });
+
+      return tx.productVariant.findUnique({
+        where: { id },
+        include: { product: true },
+      });
+    });
+  }
+
   static async deleteVariant(id: string) {
     const movementCount = await db.stockMovement.count({ where: { variantId: id } });
 

@@ -24,6 +24,28 @@ export function resolveCostPerUnit(params: {
   return null;
 }
 
+/**
+ * Approximates the total quantity of a Batch based on a sample weight.
+ * Formula: weightPerUnit = sampleWeight / sampleQty
+ *          estimatedTotalQty = floor(totalWeight / weightPerUnit)
+ *
+ * Exported as a pure function for easy unit testing.
+ */
+export function estimateBatchQuantity(params: {
+  sampleWeight: number;
+  sampleQty: number;
+  totalWeight: number;
+}): { estimatedTotalQty: number; weightPerUnit: number } {
+  if (params.sampleQty <= 0) throw new Error("Sample quantity must be > 0");
+  if (params.sampleWeight <= 0) throw new Error("Sample weight must be > 0");
+  if (params.totalWeight < 0) throw new Error("Total weight cannot be negative");
+
+  const weightPerUnit = params.sampleWeight / params.sampleQty;
+  const estimatedTotalQty = Math.floor(params.totalWeight / weightPerUnit);
+
+  return { estimatedTotalQty, weightPerUnit };
+}
+
 /** Shared include for batch detail responses. */
 const BATCH_WITH_MOVEMENTS = {
   movements: {

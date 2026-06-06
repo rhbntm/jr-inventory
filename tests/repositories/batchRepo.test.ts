@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BatchRepo, resolveCostPerUnit } from '@/app/repositories/batchRepo';
+import { BatchRepo, resolveCostPerUnit, estimateBatchQuantity } from '@/app/repositories/batchRepo';
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 
@@ -62,6 +62,46 @@ describe('resolveCostPerUnit', () => {
 
   it('tier 3: returns null when both totalCost and sellableQty are absent', () => {
     expect(resolveCostPerUnit({ sellableQty: 0 })).toBeNull();
+  });
+});
+
+// ─── estimateBatchQuantity ───────────────────────────────────────────────────
+// Pure function — no mocks needed.
+
+describe('estimateBatchQuantity', () => {
+  it('calculates weightPerUnit and estimatedTotalQty correctly', () => {
+    const result = estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: 10, totalWeight: 45.0 });
+    expect(result.weightPerUnit).toBeCloseTo(0.15);
+    expect(result.estimatedTotalQty).toBe(300); // 45.0 / 0.15 = 300
+  });
+
+  it('floors the estimated total quantity', () => {
+    const result = estimateBatchQuantity({ sampleWeight: 2, sampleQty: 3, totalWeight: 100 });
+    // weightPerUnit = 2/3 = 0.666...
+    // totalWeight / weightPerUnit = 100 / (2/3) = 150
+    // Let's use a non-integer result
+    const result2 = estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: 10, totalWeight: 45.1 });
+    // 45.1 / 0.15 = 300.666...
+    expect(result2.estimatedTotalQty).toBe(300);
+  });
+
+  it('throws an error if sampleQty is 0 or less', () => {
+    expect(() => estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: 0, totalWeight: 45.0 }))
+      .toThrow('Sample quantity must be > 0');
+    expect(() => estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: -5, totalWeight: 45.0 }))
+      .toThrow('Sample quantity must be > 0');
+  });
+
+  it('throws an error if sampleWeight is 0 or less', () => {
+    expect(() => estimateBatchQuantity({ sampleWeight: 0, sampleQty: 10, totalWeight: 45.0 }))
+      .toThrow('Sample weight must be > 0');
+    expect(() => estimateBatchQuantity({ sampleWeight: -1.5, sampleQty: 10, totalWeight: 45.0 }))
+      .toThrow('Sample weight must be > 0');
+  });
+
+  it('throws an error if totalWeight is negative', () => {
+    expect(() => estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: 10, totalWeight: -45.0 }))
+      .toThrow('Total weight cannot be negative');
   });
 });
 

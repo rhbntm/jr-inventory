@@ -2,6 +2,28 @@ import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 import type { BatchInput, BatchProcessInput } from '@/lib/schemas';
 
+/**
+ * Resolves the cost-per-unit for a BatchMovement according to the canonical three-tier rule:
+ *  1. Explicit override (caller-supplied).
+ *  2. Auto: totalCost / sellableQty (good + stained only; damaged are excluded).
+ *  3. Unknown → null. Never falls back to the variant's stored costPrice to avoid
+ *     silently corrupting profit data with a price from a different batch.
+ *
+ * Export is intentionally at module level (not on BatchRepo) so unit tests can import it
+ * directly without going through the class or mocking Prisma.
+ */
+export function resolveCostPerUnit(params: {
+  explicitCostPerUnit?: number | null;
+  totalCost?: number | null;
+  sellableQty: number;
+}): number | null {
+  if (params.explicitCostPerUnit != null) return params.explicitCostPerUnit;
+  if (params.totalCost != null && params.totalCost > 0 && params.sellableQty > 0) {
+    return params.totalCost / params.sellableQty;
+  }
+  return null;
+}
+
 /** Shared include for batch detail responses. */
 const BATCH_WITH_MOVEMENTS = {
   movements: {
@@ -63,10 +85,14 @@ export class BatchRepo {
   static async createManualBatch(data: import('@/lib/schemas').ManualBatchInput, userId: string) {
     const { header, variantMode, variant: variantData, tally } = data;
     const actualQty = tally.good + tally.stained + tally.damaged;
-    
-    // Only good and stained share the cost, damaged is pure loss
-    const goodAndStainedQty = tally.good + tally.stained;
-    const costPerUnit = goodAndStainedQty > 0 ? Number(header.totalCost) / goodAndStainedQty : 0;
+
+    // Sellable quantity: good + stained only. Damaged units are pure loss and excluded
+    // from cost allocation (see CONTEXT.md — Cost-per-unit resolution).
+    const sellableQty = tally.good + tally.stained;
+    const costPerUnit = resolveCostPerUnit({
+      totalCost: header.totalCost,
+      sellableQty,
+    });
 
     return db.$transaction(async (tx) => {
       let targetVariantId = variantData?.existingId;
@@ -108,7 +134,10 @@ export class BatchRepo {
             size: variantData.size ?? null,
             color: variantData.color ?? null,
             fabric: variantData.fabric ?? null,
-            costPrice: costPerUnit,
+            // costPerUnit may be null if totalCost was not provided. Variant.costPrice is
+            // non-nullable (Decimal with default 0); store 0 rather than null here.
+            // The null is preserved in BatchMovement / StockMovement for audit purposes.
+            costPrice: costPerUnit ?? 0,
             price: newPrice,
             currentStock: 0,
             stainedStock: 0,
@@ -229,11 +258,14 @@ export class BatchRepo {
         if (quantity <= 0) continue;
 
         const variant = variantMap.get(variantId)!;
-        const resolvedCostPerUnit =
-          costPerUnit != null ? costPerUnit
-          : batch.totalCost && computedActualQty > 0
-            ? Number(batch.totalCost) / computedActualQty
-            : Number(variant.costPrice);
+        // sellableQty for the wizard flow = computedActualQty (assigned qty).
+        // Damaged units are stored in batch.damagedQty but are never assigned to a
+        // variant, so they are already excluded from the denominator.
+        const resolvedCostPerUnit = resolveCostPerUnit({
+          explicitCostPerUnit: costPerUnit,
+          totalCost: batch.totalCost ? Number(batch.totalCost) : null,
+          sellableQty: computedActualQty,
+        });
 
         // Record BatchMovement
         await tx.batchMovement.create({
@@ -352,11 +384,11 @@ export class BatchRepo {
         if (quantity <= 0) continue;
 
         const variant = variantMap.get(variantId)!;
-        const resolvedCostPerUnit =
-          costPerUnit != null ? costPerUnit
-          : batch.totalCost && computedActualQty > 0
-            ? Number(batch.totalCost) / computedActualQty
-            : Number(variant.costPrice);
+        const resolvedCostPerUnit = resolveCostPerUnit({
+          explicitCostPerUnit: costPerUnit,
+          totalCost: batch.totalCost ? Number(batch.totalCost) : null,
+          sellableQty: computedActualQty,
+        });
 
         // Record new BatchMovement
         await tx.batchMovement.create({

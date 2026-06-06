@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BatchRepo } from '@/app/repositories/batchRepo';
+import { BatchRepo, resolveCostPerUnit } from '@/app/repositories/batchRepo';
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 
@@ -30,6 +30,43 @@ vi.mock('@/lib/db', () => {
   };
 });
 
+// ─── resolveCostPerUnit ──────────────────────────────────────────────────────
+// Pure function — no mocks needed.
+
+describe('resolveCostPerUnit', () => {
+  it('tier 1: returns explicit override when provided', () => {
+    expect(resolveCostPerUnit({ explicitCostPerUnit: 42, totalCost: 999, sellableQty: 10 })).toBe(42);
+  });
+
+  it('tier 1: treats explicit 0 as a valid known cost (not unknown)', () => {
+    // A user intentionally entering ₱0 cost should be preserved, not treated as null.
+    expect(resolveCostPerUnit({ explicitCostPerUnit: 0, totalCost: 999, sellableQty: 10 })).toBe(0);
+  });
+
+  it('tier 2: auto-calculates totalCost / sellableQty when no override', () => {
+    expect(resolveCostPerUnit({ totalCost: 8500, sellableQty: 280 })).toBeCloseTo(30.357, 2);
+  });
+
+  it('tier 3: returns null when totalCost is null', () => {
+    expect(resolveCostPerUnit({ totalCost: null, sellableQty: 100 })).toBeNull();
+  });
+
+  it('tier 3: returns null when totalCost is 0 (not recorded)', () => {
+    // ₱0 total cost means the user did not enter a cost — treat as unknown, not free.
+    expect(resolveCostPerUnit({ totalCost: 0, sellableQty: 100 })).toBeNull();
+  });
+
+  it('tier 3: returns null when sellableQty is 0 (all damaged, nothing sellable)', () => {
+    expect(resolveCostPerUnit({ totalCost: 5000, sellableQty: 0 })).toBeNull();
+  });
+
+  it('tier 3: returns null when both totalCost and sellableQty are absent', () => {
+    expect(resolveCostPerUnit({ sellableQty: 0 })).toBeNull();
+  });
+});
+
+// ─── BatchRepo ────────────────────────────────────────────────────────────────
+
 describe('BatchRepo', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,7 +80,7 @@ describe('BatchRepo', () => {
           { variantId: 'v1', quantity: 10, costPerUnit: 100 },
         ],
       };
-      
+
       (db.batch.findUnique as any).mockResolvedValueOnce(mockBatch);
       // Current stock is 10, reserved is 5. Available is 5.
       // Net change is 1 - 10 = -9.
@@ -72,7 +109,7 @@ describe('BatchRepo', () => {
           { variantId: 'v1', quantity: 10, costPerUnit: 100 },
         ],
       };
-      
+
       (db.batch.findUnique as any).mockResolvedValueOnce(mockBatch);
       // Available stock = 15 - 5 = 10. Net delta = 5 - 10 = -5. Final available = 5. (Valid)
       (db.productVariant.findMany as any).mockResolvedValueOnce([
@@ -87,7 +124,7 @@ describe('BatchRepo', () => {
 
       const data = {
         assignments: [
-          { variantId: 'v1', quantity: 5, costPerUnit: 100 }, 
+          { variantId: 'v1', quantity: 5, costPerUnit: 100 },
         ],
         damagedQty: 0,
         actualQty: 5,
@@ -98,7 +135,7 @@ describe('BatchRepo', () => {
       expect(result!.id).toBe('b1_done');
       expect(db.batchMovement.deleteMany).toHaveBeenCalledWith({ where: { batchId: 'b1' } });
       // 1 OUT reversal for old movement, 1 IN for new assignment
-      expect(db.stockMovement.create).toHaveBeenCalledTimes(2); 
+      expect(db.stockMovement.create).toHaveBeenCalledTimes(2);
     });
   });
 });

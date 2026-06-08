@@ -7,10 +7,10 @@ export class ReservationRepo {
    * Creates a reservation with row-level locking (SELECT FOR UPDATE) to prevent race conditions.
    */
   static async createReservation(
-    data: { variantId: string; quantity: number; customerName?: string | null },
+    data: { variantId: string; quantity: number; customerName?: string | null; priceAtReservation?: number | null },
     userId: string
   ) {
-    const { variantId, quantity, customerName } = data;
+    const { variantId, quantity, customerName, priceAtReservation } = data;
 
     return await db.$transaction(async (tx) => {
       // Row-level lock to prevent concurrent modifications
@@ -41,6 +41,7 @@ export class ReservationRepo {
           quantity,
           state: 'RESERVED',
           customerName,
+          priceAtReservation,
           updatedBy: userId,
         },
         include: { variant: { include: { product: true } }, user: true },
@@ -58,9 +59,13 @@ export class ReservationRepo {
     options?: { restock?: boolean }
   ) {
     return await db.$transaction(async (tx) => {
-      const raw = await tx.$queryRaw<Array<{id: string, state: ReservationState, quantity: number, variantId: string, currentStock: number, reservedStock: number, price: number, costPrice: number}>>`
-        SELECT r.id, r.state, r.quantity, r."variantId",
-               v."currentStock", v."reservedStock", v.price, v."costPrice"
+      const raw = await tx.$queryRaw<Array<{
+        id: string, state: ReservationState, quantity: number, variantId: string, 
+        priceAtReservation: number | null, currentStock: number, reservedStock: number, 
+        price: number, costPrice: number, salePrice: number | null
+      }>>`
+        SELECT r.id, r.state, r.quantity, r."variantId", r."priceAtReservation",
+               v."currentStock", v."reservedStock", v.price, v."costPrice", v."salePrice"
         FROM reservations r
         JOIN product_variants v ON v.id = r."variantId"
         WHERE r.id = ${id}
@@ -77,9 +82,11 @@ export class ReservationRepo {
         state: row.state,
         quantity: row.quantity,
         variantId: row.variantId,
+        priceAtReservation: row.priceAtReservation ? Number(row.priceAtReservation) : null,
         variant: {
           price: row.price,
           costPrice: row.costPrice,
+          salePrice: row.salePrice,
           currentStock: row.currentStock,
           reservedStock: row.reservedStock,
         },
@@ -121,7 +128,7 @@ export class ReservationRepo {
               variantId,
               type: 'OUT',
               quantity,
-              priceAtMovement: variant.price,
+              priceAtMovement: reservation.priceAtReservation ?? variant.salePrice ?? variant.price,
               costPriceAtMovement: variant.costPrice,
               note: `Reservation #${id}`,
               userId,
@@ -160,7 +167,7 @@ export class ReservationRepo {
                 variantId,
                 type: 'IN',
                 quantity,
-                priceAtMovement: variant.price,
+                priceAtMovement: reservation.priceAtReservation ?? variant.salePrice ?? variant.price,
                 costPriceAtMovement: variant.costPrice,
                 note: `Return from Reservation #${id}`,
                 userId,

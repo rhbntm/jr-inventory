@@ -84,9 +84,11 @@ export async function GET(
     const quantity = reservation.quantity;
     const unitPrice = stockMovement?.priceAtMovement
       ? Number(stockMovement.priceAtMovement)
-      : reservation.variant.salePrice 
-        ? Number(reservation.variant.salePrice)
-        : Number(reservation.variant.price);
+      : reservation.priceAtReservation != null
+        ? Number(reservation.priceAtReservation)
+        : reservation.variant.salePrice 
+          ? Number(reservation.variant.salePrice)
+          : Number(reservation.variant.price);
     const totalAmount = quantity * unitPrice;
 
     const formatter = new Intl.NumberFormat("en-PH", {

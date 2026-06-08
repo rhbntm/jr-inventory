@@ -52,6 +52,7 @@ export default function QuickReservePage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>("");
+  const [priceOverride, setPriceOverride] = useState<number | "">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sessionReservations, setSessionReservations] = useState<SessionReservation[]>([]);
 
@@ -78,6 +79,9 @@ export default function QuickReservePage() {
         reservedStock: reserved,
         availableStock: available,
         lowStockAt: variant.lowStockAt,
+        costPrice: Number(variant.costPrice ?? 0),
+        price: Number(variant.price),
+        salePrice: variant.salePrice ? Number(variant.salePrice) : null,
         searchText: `${product.name} ${variant.sku ?? ""} ${variant.size ?? ""} ${variant.color ?? ""} ${variant.fabric ?? ""}`.toLowerCase(),
       };
     })
@@ -89,6 +93,7 @@ export default function QuickReservePage() {
     setSelectedVariantId("");
     setQuantity(1);
     setCustomerName("");
+    setPriceOverride("");
     setTimeout(() => setSearchOpen(true), 100);
   }, []);
 
@@ -111,6 +116,7 @@ export default function QuickReservePage() {
       variantId: selectedVariantId,
       quantity,
       customerName: customerName.trim() || null,
+      priceAtReservation: priceOverride !== "" ? priceOverride : undefined,
     };
 
     const result = createReservationSchema.safeParse(input);
@@ -209,6 +215,7 @@ export default function QuickReservePage() {
                           value={variant.searchText}
                           onSelect={() => {
                             setSelectedVariantId(variant.id);
+                            setPriceOverride(variant.salePrice ?? variant.price);
                             setSearchOpen(false);
                             setTimeout(() => quantityInputRef.current?.focus(), 100);
                           }}
@@ -269,6 +276,41 @@ export default function QuickReservePage() {
                   </Badge>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Pricing Override (NEW) */}
+          {selectedVariant && (
+            <div className="space-y-2 p-3 border rounded-lg bg-accent/30">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="priceAtReservation" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Unit Price for this Transaction
+                </Label>
+                {priceOverride !== (selectedVariant.salePrice ?? selectedVariant.price) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => setPriceOverride(selectedVariant.salePrice ?? selectedVariant.price)}
+                  >
+                    Reset to Default
+                  </Button>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">₱</span>
+                <Input
+                  id="priceAtReservation"
+                  type="number"
+                  step="0.01"
+                  value={priceOverride}
+                  onChange={(e) => setPriceOverride(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                  className="pl-7 h-10 text-lg font-bold border-2 focus-visible:ring-primary"
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                This will be recorded in history as the actual selling price when shipped.
+              </p>
             </div>
           )}
 

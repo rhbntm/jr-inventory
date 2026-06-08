@@ -79,6 +79,8 @@ describe('estimateBatchQuantity', () => {
     const result = estimateBatchQuantity({ sampleWeight: 2, sampleQty: 3, totalWeight: 100 });
     // weightPerUnit = 2/3 = 0.666...
     // totalWeight / weightPerUnit = 100 / (2/3) = 150
+    expect(result.estimatedTotalQty).toBe(150);
+
     // Let's use a non-integer result
     const result2 = estimateBatchQuantity({ sampleWeight: 1.5, sampleQty: 10, totalWeight: 45.1 });
     // 45.1 / 0.15 = 300.666...

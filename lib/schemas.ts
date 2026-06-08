@@ -115,6 +115,7 @@ export const createReservationSchema = z.object({
   variantId: z.string().min(1, "Variant ID is required"),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
   customerName: z.string().trim().nullable().optional(),
+  priceAtReservation: z.coerce.number().min(0).nullable().optional(),
 });
 
 export const updateReservationSchema = z.object({

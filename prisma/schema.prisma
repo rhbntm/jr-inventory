@@ -206,6 +206,7 @@ model Reservation {
   returnedAt   DateTime?
   cancelledAt  DateTime?
   updatedBy    String?
+  priceAtReservation Decimal? @db.Decimal(10, 2)
 
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   user    User?          @relation(fields: [updatedBy], references: [id], onDelete: SetNull)

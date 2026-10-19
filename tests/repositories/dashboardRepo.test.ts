@@ -46,6 +46,9 @@ describe('DashboardRepo.getDashboardStats', () => {
       },
     ]);
 
+    // Mock low stock count (separate query, not capped by the list's LIMIT)
+    (db.$queryRaw as any).mockResolvedValueOnce([{ count: 1 }]);
+
     // Mock inventory valuation
     (db.$queryRaw as any).mockResolvedValueOnce([
       {
@@ -110,5 +113,28 @@ describe('DashboardRepo.getDashboardStats', () => {
     expect(result.stats.todayRevenue).toBe(1000);
     expect(result.stats.todayProfit).toBe(400);
     expect(result.stats.slowMovingItems[0].availableStock).toBe(1);
+  });
+
+  it('reports the full low-stock count even when the list is limited', async () => {
+    const lowStockRow = {
+      id: 'v1', sku: null, size: null, color: null, fabric: null,
+      currentStock: 0, reservedStock: 0, lowStockAt: 5, price: 100,
+      productId: 'p1', product_name: 'Prod 1',
+    };
+    (db.$queryRaw as any)
+      .mockResolvedValueOnce(Array.from({ length: 20 }, (_, i) => ({ ...lowStockRow, id: `v${i}` }))) // list (LIMIT 20)
+      .mockResolvedValueOnce([{ count: 37 }]) // count
+      .mockResolvedValueOnce([{ totalCost: 0, totalRevenue: 0, totalProfit: 0, weightedMarginSum: 0, totalStockForMargin: 0 }])
+      .mockResolvedValueOnce([]) // trends
+      .mockResolvedValueOnce([]) // margins
+      .mockResolvedValueOnce([]) // top performers
+      .mockResolvedValueOnce([]) // slow moving
+      .mockResolvedValueOnce([{ revenue: 0, profit: 0 }]); // today sales
+    (db.$transaction as any).mockResolvedValueOnce([0, 0, { _sum: { quantity: null } }, { _sum: { quantity: null } }, []]);
+
+    const result = await DashboardRepo.getDashboardStats();
+
+    expect(result.lowStockItems).toHaveLength(20);
+    expect(result.stats.lowStockCount).toBe(37);
   });
 });

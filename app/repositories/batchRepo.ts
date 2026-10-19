@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 import type { BatchInput, BatchProcessInput } from '@/lib/schemas';
@@ -44,6 +45,11 @@ export function estimateBatchQuantity(params: {
   const estimatedTotalQty = Math.floor(params.totalWeight / weightPerUnit);
 
   return { estimatedTotalQty, weightPerUnit };
+}
+
+/** Total of positive assigned quantities (the batch's Sellable Quantity in the wizard flow). */
+function sumAssigned(items: Array<{ quantity: number }>): number {
+  return items.reduce((sum, a) => sum + (a.quantity > 0 ? a.quantity : 0), 0);
 }
 
 /** Shared include for batch detail responses. */
@@ -252,6 +258,7 @@ export class BatchRepo {
   /**
    * Finalise a batch: records BatchMovements, creates IN StockMovements,
    * and updates variant stock — all within a single transaction.
+   * A batch can only be processed once; use reprocessBatch to change it.
    */
   static async processBatch(id: string, data: BatchProcessInput, userId: string) {
     const { assignments, damagedQty, actualQty } = data;
@@ -260,33 +267,38 @@ export class BatchRepo {
     if (!batch) throw new ApiError(404, 'Batch not found');
 
     // Validate all variant IDs exist
-    const variantIds = assignments.map((a) => a.variantId);
+    const variantIds = Array.from(new Set(assignments.map((a) => a.variantId)));
     const variants = await db.productVariant.findMany({ where: { id: { in: variantIds } } });
     if (variants.length !== variantIds.length) {
       throw new ApiError(422, 'One or more variant IDs are invalid');
     }
 
     const variantMap = new Map(variants.map((v) => [v.id, v]));
-    const computedActualQty = actualQty ?? assignments.reduce((sum, a) => sum + a.quantity, 0);
+    // Sellable Quantity for the wizard flow is the assigned total. Damaged units live
+    // in damagedQty and are never assigned, and actualQty may be a weighing estimate,
+    // so neither belongs in the cost divisor (see CONTEXT.md — Cost-per-unit resolution).
+    const assignedQty = sumAssigned(assignments);
+    const computedActualQty = actualQty ?? assignedQty;
 
     await db.$transaction(async (tx) => {
-      // Update batch with final quantities
-      await tx.batch.update({
-        where: { id },
+      // Claim the batch: only an unprocessed batch (actualQty still null) matches,
+      // so a double submit or retry can't add the stock twice.
+      const claimed = await tx.batch.updateMany({
+        where: { id, actualQty: null },
         data: { actualQty: computedActualQty, damagedQty },
       });
+      if (claimed.count === 0) {
+        throw new ApiError(409, 'Batch has already been processed');
+      }
 
       for (const { variantId, quantity, costPerUnit } of assignments) {
         if (quantity <= 0) continue;
 
         const variant = variantMap.get(variantId)!;
-        // sellableQty for the wizard flow = computedActualQty (assigned qty).
-        // Damaged units are stored in batch.damagedQty but are never assigned to a
-        // variant, so they are already excluded from the denominator.
         const resolvedCostPerUnit = resolveCostPerUnit({
           explicitCostPerUnit: costPerUnit,
           totalCost: batch.totalCost ? Number(batch.totalCost) : null,
-          sellableQty: computedActualQty,
+          sellableQty: assignedQty,
         });
 
         // Record BatchMovement
@@ -326,56 +338,85 @@ export class BatchRepo {
   /**
    * Reprocess a batch: reverses old movements, applies new ones,
    * preserves audit trail via StockMovements, and ensures available stock
-   * doesn't drop below zero.
+   * doesn't drop below zero. Everything, including the checks, runs in one
+   * transaction with the batch and affected variants locked.
    */
   static async reprocessBatch(id: string, data: BatchProcessInput, userId: string) {
     const { assignments, damagedQty, actualQty } = data;
 
-    const batch = await db.batch.findUnique({
-      where: { id },
-      include: { movements: true },
-    });
-    if (!batch) throw new ApiError(404, 'Batch not found');
+    await db.$transaction(async (tx) => {
+      // Lock the batch so two reprocesses can't interleave.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM batches WHERE id = ${id} FOR UPDATE
+      `;
+      if (!locked.length) throw new ApiError(404, 'Batch not found');
 
-    // Validate all new variant IDs exist
-    const newVariantIds = assignments.map((a) => a.variantId);
-    const oldVariantIds = batch.movements.map((m) => m.variantId);
-    const allVariantIds = Array.from(new Set([...newVariantIds, ...oldVariantIds]));
+      const batch = await tx.batch.findUnique({
+        where: { id },
+        include: { movements: true },
+      });
+      if (!batch) throw new ApiError(404, 'Batch not found');
+      if (batch.actualQty === null) {
+        throw new ApiError(409, 'Batch has not been processed yet');
+      }
 
-    const variants = await db.productVariant.findMany({ where: { id: { in: allVariantIds } } });
-    if (variants.length !== allVariantIds.length) {
-      throw new ApiError(422, 'One or more variant IDs are invalid');
-    }
-
-    const variantMap = new Map(variants.map((v) => [v.id, v]));
-
-    // Calculate net deltas
-    const deltas = new Map<string, number>();
-    for (const vId of allVariantIds) deltas.set(vId, 0);
-
-    for (const old of batch.movements) {
-      deltas.set(old.variantId, deltas.get(old.variantId)! - old.quantity);
-    }
-    for (const current of assignments) {
-      deltas.set(current.variantId, deltas.get(current.variantId)! + current.quantity);
-    }
-
-    // Safety check: ensure no variant drops below 0 available stock
-    for (const [vId, delta] of Array.from(deltas.entries())) {
-      const variant = variantMap.get(vId)!;
-      const availableStock = variant.currentStock - variant.reservedStock;
-      if (availableStock + delta < 0) {
+      // Reprocessing assumes each BatchMovement added exactly its quantity to
+      // currentStock. Manual-tally batches break that (stained/damaged units are in
+      // BatchMovement.quantity but never entered currentStock), so reject them.
+      const [inSum, outSum] = await Promise.all([
+        tx.stockMovement.aggregate({ where: { batchId: id, type: 'IN' }, _sum: { quantity: true } }),
+        tx.stockMovement.aggregate({ where: { batchId: id, type: 'OUT' }, _sum: { quantity: true } }),
+      ]);
+      const netStockAdded = (inSum._sum.quantity ?? 0) - (outSum._sum.quantity ?? 0);
+      if (netStockAdded !== sumAssigned(batch.movements)) {
         throw new ApiError(
           409,
-          `Cannot reprocess: Variant ${variant.sku || vId} would have negative available stock.`
+          'This batch cannot be reprocessed because its stock movements do not match its assignments. Manual tally batches with stained or damaged units cannot be reprocessed.'
         );
       }
-    }
 
-    const computedActualQty = actualQty ?? assignments.reduce((sum, a) => sum + a.quantity, 0);
+      // Validate and lock every affected variant
+      const newVariantIds = assignments.map((a) => a.variantId);
+      const oldVariantIds = batch.movements.map((m) => m.variantId);
+      const allVariantIds = Array.from(new Set([...newVariantIds, ...oldVariantIds]));
 
-    await db.$transaction(async (tx) => {
-      // 1. Reverse old movements in audit log (OUT)
+      await tx.$queryRaw`
+        SELECT id FROM product_variants WHERE id IN (${Prisma.join(allVariantIds)}) FOR UPDATE
+      `;
+      const variants = await tx.productVariant.findMany({ where: { id: { in: allVariantIds } } });
+      if (variants.length !== allVariantIds.length) {
+        throw new ApiError(422, 'One or more variant IDs are invalid');
+      }
+
+      const variantMap = new Map(variants.map((v) => [v.id, v]));
+
+      // Calculate net deltas
+      const deltas = new Map<string, number>();
+      for (const vId of allVariantIds) deltas.set(vId, 0);
+      for (const old of batch.movements) {
+        deltas.set(old.variantId, deltas.get(old.variantId)! - old.quantity);
+      }
+      for (const current of assignments) {
+        deltas.set(current.variantId, deltas.get(current.variantId)! + current.quantity);
+      }
+
+      // Safety check: ensure no variant drops below 0 available stock
+      for (const [vId, delta] of Array.from(deltas.entries())) {
+        const variant = variantMap.get(vId)!;
+        const availableStock = variant.currentStock - variant.reservedStock;
+        if (availableStock + delta < 0) {
+          throw new ApiError(
+            409,
+            `Cannot reprocess: Variant ${variant.sku || vId} would have negative available stock.`
+          );
+        }
+      }
+
+      const assignedQty = sumAssigned(assignments);
+      const computedActualQty = actualQty ?? assignedQty;
+
+      // 1. Reverse old movements in audit log (OUT). These are not sales, so they
+      //    carry no selling price and are excluded from revenue.
       for (const old of batch.movements) {
         if (old.quantity <= 0) continue;
         await tx.stockMovement.create({
@@ -383,7 +424,7 @@ export class BatchRepo {
             variantId: old.variantId,
             type: 'OUT',
             quantity: old.quantity,
-            priceAtMovement: variantMap.get(old.variantId)?.price ?? 0,
+            priceAtMovement: null,
             costPriceAtMovement: old.costPerUnit,
             note: `Batch #${id.slice(-6)} Reprocess Reversal`,
             userId,
@@ -409,7 +450,7 @@ export class BatchRepo {
         const resolvedCostPerUnit = resolveCostPerUnit({
           explicitCostPerUnit: costPerUnit,
           totalCost: batch.totalCost ? Number(batch.totalCost) : null,
-          sellableQty: computedActualQty,
+          sellableQty: assignedQty,
         });
 
         // Record new BatchMovement

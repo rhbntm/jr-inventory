@@ -21,6 +21,10 @@ import { ArrowLeft, RotateCcw, Package, Calendar, DollarSign, AlertCircle } from
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 
+// Reprocess currently re-submits the batch's existing assignments unchanged, so it
+// only adds noise to the movement log. Hidden until there's a UI to edit assignments.
+const REPROCESS_ENABLED = false;
+
 export default function BatchDetailPage() {
   const { id } = useParams<{ id: string }>();
 
@@ -68,7 +72,8 @@ export default function BatchDetailPage() {
           assignments: batch.movements.map((m) => ({
             variantId: m.variantId,
             quantity: m.quantity,
-            costPerUnit: Number(m.costPerUnit),
+            // Keep an unknown cost (null) unknown instead of turning it into 0.
+            costPerUnit: m.costPerUnit == null ? null : Number(m.costPerUnit),
           })),
           damagedQty: batch.damagedQty ?? 0,
           actualQty: batch.actualQty ?? totalAssigned,
@@ -93,7 +98,7 @@ export default function BatchDetailPage() {
         <h1 className="text-3xl font-bold tracking-tight flex-1">
           Batch #{batch.id.slice(-6).toUpperCase()}
         </h1>
-        {isOwner && isProcessed && (
+        {REPROCESS_ENABLED && isOwner && isProcessed && (
           <Button
             variant="outline"
             className="text-amber-600 border-amber-600 hover:bg-amber-50"

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+// Env is loaded (and checked) by tests/test-env.ts, which runs first.
 import '@testing-library/jest-dom';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { db } from '@/lib/db';

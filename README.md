@@ -73,7 +73,7 @@ npx prisma migrate deploy
 npx prisma generate
 
 # 5. Create the first OWNER user
-npm run create-user
+npm run create-user -- --email you@example.com --name "Your Name" --role OWNER --password "<at least 8 chars>"
 
 # 6. Start the dev server
 npm run dev
@@ -111,9 +111,30 @@ Required env vars for Docker (set in `.env`):
 | `npm run build` | Production build |
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |
-| `npm run test` | Run Vitest unit tests |
+| `npm run test` | Run Vitest unit tests (needs a test database, see below) |
 | `npm run test:ui` | Run Vitest with browser UI |
-| `npm run create-user` | Seed an initial OWNER account |
+| `npm run create-user` | Create or invite a user (see below) |
+
+### Users and Google sign-in
+
+Google sign-in is **invite-only**: a Google account can sign in only if its email already exists in the users table. To invite a partner, create them without a password:
+
+```bash
+npm run create-user -- --email partner@gmail.com --name "Partner Name" --role PARTNER
+```
+
+Add `--password <password>` to allow email/password sign-in too, and `--update` to change an existing user.
+
+### Tests
+
+The test setup **deletes all data** in its database before and after each test. It reads `DATABASE_URL` from `.env.test` (not `.env`) and refuses to run unless the database name ends in `_test`.
+
+```bash
+cp .env.test.example .env.test
+docker compose -f docker-compose.dev.yml exec db createdb -U postgres jr_inventory_test
+DATABASE_URL="postgresql://postgres:postgres@localhost:5435/jr_inventory_test?schema=public" npx prisma migrate deploy
+npm test
+```
 
 ```bash
 # Run manually

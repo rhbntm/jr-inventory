@@ -75,6 +75,9 @@ export default function QuickStockPage() {
       color: variant.color,
       fabric: variant.fabric,
       currentStock: variant.currentStock,
+      reservedStock: variant.reservedStock,
+      // Units held for reservations can't be sold.
+      availableStock: variant.currentStock - variant.reservedStock,
       lowStockAt: variant.lowStockAt,
       costPrice: Number(variant.costPrice ?? 0),
       price: Number(variant.price),
@@ -110,6 +113,11 @@ export default function QuickStockPage() {
   };
 
   const handleSubmit = async (type: "IN" | "OUT") => {
+    if (type === "OUT" && selectedVariant && quantity > selectedVariant.availableStock) {
+      toast.error(`Only ${selectedVariant.availableStock} available (${selectedVariant.reservedStock} reserved)`);
+      return;
+    }
+
     const input = {
       variantId: selectedVariantId,
       type,
@@ -160,8 +168,8 @@ export default function QuickStockPage() {
     }
   };
 
-  const isLowStock = selectedVariant && selectedVariant.currentStock <= selectedVariant.lowStockAt;
-  const isOutOfStock = selectedVariant && selectedVariant.currentStock === 0;
+  const isLowStock = selectedVariant && selectedVariant.availableStock <= selectedVariant.lowStockAt;
+  const isOutOfStock = selectedVariant && selectedVariant.availableStock <= 0;
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -235,7 +243,8 @@ export default function QuickStockPage() {
                             <span className="text-sm text-muted-foreground">
                               {[variant.size, variant.color, variant.sku]
                                 .filter(Boolean)
-                                .join(" / ") || "No details"} — Stock: {variant.currentStock}
+                                .join(" / ") || "No details"} — Available: {variant.availableStock}
+                              {variant.reservedStock > 0 && ` (${variant.reservedStock} reserved)`}
                             </span>
                           </div>
                         </CommandItem>
@@ -252,7 +261,7 @@ export default function QuickStockPage() {
             <div className="rounded-lg bg-muted p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Current Stock</p>
+                  <p className="text-sm text-muted-foreground">Available Stock</p>
                   <p
                     className={cn(
                       "text-3xl font-bold",
@@ -260,8 +269,13 @@ export default function QuickStockPage() {
                       isLowStock && !isOutOfStock && "text-amber-600"
                     )}
                   >
-                    {selectedVariant.currentStock}
+                    {selectedVariant.availableStock}
                   </p>
+                  {selectedVariant.reservedStock > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedVariant.currentStock} on hand · {selectedVariant.reservedStock} reserved
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Low Stock Alert</p>

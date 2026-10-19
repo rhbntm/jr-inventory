@@ -125,6 +125,33 @@ describe('Zod Schemas', () => {
       expect(result.success).toBe(false);
     });
 
+    it('should allow ADJUSTMENT to set stock to 0', () => {
+      const result = movementSchema.safeParse({
+        variantId: 'var-123',
+        type: 'ADJUSTMENT',
+        quantity: 0,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject OUT with quantity 0', () => {
+      const result = movementSchema.safeParse({
+        variantId: 'var-123',
+        type: 'OUT',
+        quantity: 0,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject negative ADJUSTMENT', () => {
+      const result = movementSchema.safeParse({
+        variantId: 'var-123',
+        type: 'ADJUSTMENT',
+        quantity: -1,
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('should require quantity to be an integer', () => {
       const result = movementSchema.safeParse({
         variantId: 'var-123',

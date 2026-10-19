@@ -41,6 +41,11 @@ export function withValidation<T>(schema: ZodSchema<T>) {
 
 // Parse and validate JSON body from request
 export async function parseBody<T>(req: NextRequest, schema: ZodSchema<T>): Promise<T> {
-  const json = await req.json();
+  let json: unknown;
+  try {
+    json = await req.json();
+  } catch {
+    throw new ApiError(400, "Invalid JSON body");
+  }
   return withValidation(schema)(json);
 }

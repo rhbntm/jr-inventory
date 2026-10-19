@@ -32,10 +32,20 @@ export default function NewMovementPage() {
 
   const selectedProduct = productsData?.data.find((p) => p.id === productId);
   const variants = selectedProduct?.variants ?? [];
+  const selectedVariant = variants.find((v) => v.id === variantId);
+  // Units held for reservations can't be sold.
+  const availableStock = selectedVariant
+    ? selectedVariant.currentStock - selectedVariant.reservedStock
+    : undefined;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!variantId || !quantity) return;
+
+    if (type === "OUT" && availableStock !== undefined && parseInt(quantity) > availableStock) {
+      toast.error(`Only ${availableStock} available (${selectedVariant?.reservedStock ?? 0} reserved)`);
+      return;
+    }
 
     try {
       await createMovement.mutateAsync({
@@ -126,7 +136,8 @@ export default function NewMovementPage() {
                 <SelectContent>
                   {variants.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
-                      {v.sku ?? "No SKU"} — Stock: {v.currentStock} —{" "}
+                      {v.sku ?? "No SKU"} — Available: {v.currentStock - v.reservedStock}
+                      {v.reservedStock > 0 && ` (${v.reservedStock} reserved)`} —{" "}
                       {v.size ?? ""} {v.color ?? ""}
                     </SelectItem>
                   ))}
@@ -135,11 +146,14 @@ export default function NewMovementPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity *</Label>
+              <Label htmlFor="quantity">
+                {type === "ADJUSTMENT" ? "New stock level *" : "Quantity *"}
+              </Label>
               <Input
                 id="quantity"
                 type="number"
-                min="1"
+                min={type === "ADJUSTMENT" ? (selectedVariant?.reservedStock ?? 0) : 1}
+                max={type === "OUT" ? availableStock : undefined}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="Enter quantity"

@@ -14,3 +14,16 @@ export function formatDate(date: Date | string): string {
     minute: "2-digit",
   })
 }
+
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+}
+
+/** Escapes text for safe insertion into HTML markup or attribute values. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch])
+}

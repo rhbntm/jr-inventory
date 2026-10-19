@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { escapeHtml } from "@/lib/utils";
 
 export async function GET(
   req: NextRequest,
@@ -64,25 +65,26 @@ export async function GET(
       });
     }
 
-    const customerName = reservation.customerName || "Walk-in Customer";
-    const shortId = reservation.id.substring(0, 8);
+    // Every value below that comes from user input is escaped before going into the HTML.
+    const customerName = escapeHtml(reservation.customerName || "Walk-in Customer");
+    const shortId = escapeHtml(reservation.id.substring(0, 8));
     const date = reservation.shippedAt || reservation.reservedAt;
     const formattedDate = new Intl.DateTimeFormat("en-PH", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(date));
 
-    const product = reservation.variant.product?.name || "Unknown Product";
-    const variantDetails = [
+    const product = escapeHtml(reservation.variant.product?.name || "Unknown Product");
+    const variantDetails = escapeHtml([
       reservation.variant.size,
       reservation.variant.color,
       reservation.variant.sku,
     ]
       .filter(Boolean)
-      .join(" / ");
+      .join(" / "));
       
     const quantity = reservation.quantity;
-    const unitPrice = stockMovement?.priceAtMovement
+    const unitPrice = stockMovement.priceAtMovement
       ? Number(stockMovement.priceAtMovement)
       : reservation.priceAtReservation != null
         ? Number(reservation.priceAtReservation)
@@ -95,10 +97,6 @@ export async function GET(
       style: "currency",
       currency: "PHP",
     });
-
-    const prepaidNote = !stockMovement 
-      ? `<p style="text-align: center; font-style: italic; color: #666; margin-bottom: 20px;">Payment collected online – receipt issued before shipment.</p>`
-      : "";
 
     const html = `
       <!DOCTYPE html>
@@ -228,8 +226,6 @@ export async function GET(
             </tr>
           </tbody>
         </table>
-        
-        ${prepaidNote}
 
         <div class="footer">
           <p>Thank you for your purchase!</p>

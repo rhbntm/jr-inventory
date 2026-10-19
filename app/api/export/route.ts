@@ -44,6 +44,7 @@ export const GET = withErrorHandler(async () => {
     { wch: 12 }, // Color
     { wch: 12 }, // Fabric
     { wch: 10 }, // Price
+    { wch: 12 }, // Sale Price
     { wch: 14 }, // Current Stock
     { wch: 12 }, // Low Stock At
     { wch: 20 }, // Category

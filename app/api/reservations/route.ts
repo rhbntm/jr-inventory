@@ -4,14 +4,16 @@ import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
 import { ReservationRepo } from "@/app/repositories/reservationRepo";
 import { ReservationState } from "@prisma/client";
+import { ApiError } from "@/lib/errors";
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireAuth();
   const { searchParams } = req.nextUrl;
   
-  // Need to validate state is a valid enum value if provided, but casting is fine for now
-  // since prisma will ignore or throw on invalid enum values.
   const stateRaw = searchParams.get("state");
+  if (stateRaw && !(Object.values(ReservationState) as string[]).includes(stateRaw)) {
+    throw new ApiError(400, `Invalid reservation state: ${stateRaw}`);
+  }
   const state = stateRaw ? (stateRaw as ReservationState) : undefined;
   
   const variantId = searchParams.get("variantId") ?? undefined;

@@ -30,6 +30,8 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         data: {
           currentStock: 0,
           reservedStock: 0,
+          stainedStock: 0,
+          damagedStock: 0,
         },
       });
     }

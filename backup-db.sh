@@ -7,6 +7,9 @@ set -euo pipefail
 # explicitly unless DOCKER_HOST is already set.
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 
+# Cron runs with a minimal PATH (/usr/bin:/bin), which can miss rclone and docker.
+export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/snap/bin:$PATH"
+
 BACKUP_DIR="/home/brent/jr-inventory/backups"
 RETENTION_DAYS=7
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
@@ -28,9 +31,16 @@ if [ "$DUMP_BYTES" -lt 1000 ]; then
   exit 1
 fi
 
+# The dump is good from here on: later failures (e.g. the upload) must not delete it.
+trap - ERR
+
 find "$BACKUP_DIR" -name "*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
 
 # Off-site sync to Backblaze B2
+if ! command -v rclone >/dev/null; then
+  echo "Local backup saved, but off-site sync FAILED: rclone not found on PATH ($PATH)" >&2
+  exit 1
+fi
 rclone sync "$BACKUP_DIR" mycloud:jr-inventory-backups --delete-after
 
 echo "Backup completed: $(basename "$FILE") ($DUMP_BYTES bytes uncompressed)"

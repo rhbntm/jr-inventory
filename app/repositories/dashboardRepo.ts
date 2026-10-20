@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import type { DashboardStats } from '@/lib/types';
+import { BUSINESS_TZ, addDays, businessDateKey, startOfBusinessDay } from '@/lib/time';
 
 export class DashboardRepo {
   private static async getLowStockVariants() {
@@ -30,6 +31,16 @@ export class DashboardRepo {
       ORDER BY (v."currentStock" - v."reservedStock") ASC
       LIMIT 20
     `;
+  }
+
+  private static async getLowStockCount() {
+    const rows = await db.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*)::int AS "count"
+      FROM "product_variants" v
+      WHERE (v."currentStock" - v."reservedStock") <= v."lowStockAt"
+        AND v."isArchived" = false
+    `;
+    return Number(rows[0]?.count ?? 0);
   }
 
   private static async getInventoryValuation() {
@@ -69,7 +80,8 @@ export class DashboardRepo {
       }>
     >`
       SELECT
-        TO_CHAR("createdAt", 'YYYY-MM-DD') as "date",
+        -- createdAt is stored as UTC; bucket by the business (Manila) calendar date
+        TO_CHAR(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE ${BUSINESS_TZ}, 'YYYY-MM-DD') as "date",
         "type",
         SUM("quantity") as "total"
       FROM "stock_movements"
@@ -163,6 +175,8 @@ export class DashboardRepo {
       FROM "stock_movements" m
       JOIN "product_variants" v ON m."variantId" = v.id
       WHERE m."type" = 'OUT'
+        -- Only sales: batch reversals and damage write-offs carry a batchId
+        AND m."batchId" IS NULL
         AND m."createdAt" >= ${todayStart}
     `;
   }
@@ -192,17 +206,14 @@ export class DashboardRepo {
    * The shape matches the existing DashboardStats type.
    */
   static async getDashboardStats() {
-    // Date helpers
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Date helpers (business time zone, not the server's)
+    const todayStart = startOfBusinessDay();
+    const sevenDaysAgo = addDays(todayStart, -6);
+    const thirtyDaysAgo = addDays(new Date(), -30);
 
     const [
       lowStockVariants,
+      lowStockCount,
       inventoryValuation,
       trends,
       margins,
@@ -212,6 +223,7 @@ export class DashboardRepo {
       [totalProducts, totalVariants, todayIn, todayOut, recentMovements],
     ] = await Promise.all([
       this.getLowStockVariants(),
+      this.getLowStockCount(),
       this.getInventoryValuation(),
       this.getMovementTrends(sevenDaysAgo),
       this.getMarginPercentages(),
@@ -254,10 +266,9 @@ export class DashboardRepo {
     // Build trend map for the last 7 days
     const trendMap = new Map<string, { name: string; in: number; out: number }>();
     for (let i = 0; i < 7; i++) {
-      const d = new Date(sevenDaysAgo);
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const name = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const d = addDays(sevenDaysAgo, i);
+      const dateStr = businessDateKey(d);
+      const name = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: BUSINESS_TZ });
       trendMap.set(dateStr, { name, in: 0, out: 0 });
     }
     trends.forEach((t) => {
@@ -287,7 +298,7 @@ export class DashboardRepo {
     const stats: DashboardStats = {
       totalProducts: totalProducts as number,
       totalVariants: totalVariants as number,
-      lowStockCount: lowStockVariants.length,
+      lowStockCount,
       todayMovementsIn: todayIn._sum?.quantity ?? 0,
       todayMovementsOut: todayOut._sum?.quantity ?? 0,
       todayRevenue: Number(todaySales[0].revenue),

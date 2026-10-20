@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { movementSchema } from "@/lib/schemas";
+import { movementSchema, movementTypeSchema } from "@/lib/schemas";
+import { ApiError } from "@/lib/errors";
 import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
 import { MovementRepo } from "@/app/repositories/movementRepo";
@@ -10,7 +11,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { searchParams } = req.nextUrl;
   const variantId = searchParams.get("variantId") ?? undefined;
   const productId = searchParams.get("productId") ?? undefined;
-  const type = searchParams.get("type") as "IN" | "OUT" | "ADJUSTMENT" | null;
+  const typeRaw = searchParams.get("type");
+  const typeResult = movementTypeSchema.nullable().safeParse(typeRaw || null);
+  if (!typeResult.success) throw new ApiError(400, `Invalid movement type: ${typeRaw}`);
+  const type = typeResult.data;
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));

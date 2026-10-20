@@ -22,12 +22,18 @@ export const productSchema = z.object({
   categoryId: z.string().nullable().optional(),
 });
 
+export const movementTypeSchema = z.enum(["IN", "OUT", "ADJUSTMENT"]);
+
 export const movementSchema = z.object({
   variantId: z.string().min(1, "Variant ID is required"),
-  type: z.enum(["IN", "OUT", "ADJUSTMENT"]),
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  type: movementTypeSchema,
+  // For ADJUSTMENT this is the new absolute stock level, so 0 is allowed.
+  quantity: z.coerce.number().int().min(0, "Quantity cannot be negative"),
   priceAtMovement: z.coerce.number().min(0).nullable().optional(),
   note: z.string().trim().nullable().optional(),
+}).refine((d) => d.type === "ADJUSTMENT" || d.quantity >= 1, {
+  message: "Quantity must be at least 1",
+  path: ["quantity"],
 });
 
 export type VariantInput = z.infer<typeof variantSchema>;

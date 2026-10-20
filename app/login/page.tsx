@@ -29,6 +29,15 @@ const GoogleIcon = () => (
   </svg>
 );
 
+const LOGIN_ERRORS: Record<string, string> = {
+  TooManyAttempts: "Too many failed attempts. Please try again in 30 minutes.",
+  CredentialsSignin: "Invalid email or password",
+  OAuthUser: "Invalid email or password",
+  NotInvited: "This Google account hasn't been invited. Ask the owner to add you first.",
+  SetupRequired: "The system hasn't been set up yet. The owner must create the first account.",
+  OAuthAccountNotLinked: "This email is already linked to a different sign-in method.",
+};
+
 function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -81,11 +90,7 @@ function LoginForm() {
         <CardContent className="space-y-4">
           {error && (
             <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
-              {error === "TooManyAttempts"
-                ? "Too many failed attempts. Please try again in 30 minutes."
-                : error === "CredentialsSignin" || error === "OAuthUser"
-                  ? "Invalid email or password"
-                  : "An error occurred. Please try again."}
+              {LOGIN_ERRORS[error] ?? "An error occurred. Please try again."}
             </div>
           )}
           <Button

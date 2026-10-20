@@ -28,24 +28,46 @@ export class MovementRepo {
     // Perform the whole operation in a transaction for atomicity
     const movement = await db.$transaction(async (tx) => {
       if (type === 'OUT') {
+        // Only Available Stock (currentStock − reservedStock) can be sold; units held
+        // for reservations are off limits. The check and decrement are one statement
+        // so concurrent sales can't oversell.
+        const updated = await tx.$executeRaw`
+          UPDATE product_variants
+          SET "currentStock" = "currentStock" - ${quantity}, "updatedAt" = NOW() AT TIME ZONE 'UTC'
+          WHERE id = ${variantId} AND "currentStock" - "reservedStock" >= ${quantity}
+        `;
+        if (updated === 0) {
+          const fresh = await tx.productVariant.findUnique({ where: { id: variantId } });
+          const availableStock = fresh ? fresh.currentStock - fresh.reservedStock : 0;
+          throw new ApiError(
+            422,
+            `Insufficient available stock. Available: ${availableStock}, Requested: ${quantity}`,
+            {
+              currentStock: fresh?.currentStock ?? 0,
+              reservedStock: fresh?.reservedStock ?? 0,
+              availableStock,
+              requestedQuantity: quantity,
+            }
+          );
+        }
+      } else if (type === 'ADJUSTMENT') {
+        // Stock can't be set below what is already promised to reservations.
         const updated = await tx.productVariant.updateMany({
-          where: { id: variantId, currentStock: { gte: quantity } },
-          data: { currentStock: { decrement: quantity } },
+          where: { id: variantId, reservedStock: { lte: quantity } },
+          data: { currentStock: quantity },
         });
         if (updated.count === 0) {
           const fresh = await tx.productVariant.findUnique({ where: { id: variantId } });
           throw new ApiError(
             422,
-            'Insufficient stock',
-            { currentStock: fresh?.currentStock ?? 0, requestedQuantity: quantity }
+            `Cannot set stock below reserved quantity (${fresh?.reservedStock ?? 0}). Release or cancel reservations first.`,
+            { reservedStock: fresh?.reservedStock ?? 0, requestedQuantity: quantity }
           );
         }
       } else {
         await tx.productVariant.update({
           where: { id: variantId },
-          data: {
-            currentStock: type === 'ADJUSTMENT' ? quantity : { increment: quantity },
-          },
+          data: { currentStock: { increment: quantity } },
         });
       }
 

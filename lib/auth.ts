@@ -20,6 +20,10 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Sign-in is invite-only (see signIn callback below), so an invited user row
+      // exists before its first Google login. Linking by email is needed to attach
+      // the Google account to that row. Google verifies email ownership.
+      allowDangerousEmailAccountLinking: true,
     }),
     CredentialsProvider({
       name: "credentials",
@@ -92,30 +96,21 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       if (account?.provider === "google") {
+        if (!user.email) return "/login?error=NotInvited";
+
         const existingUser = await prisma.user.findUnique({
-          where: { email: user.email! },
+          where: { email: user.email },
         });
 
         if (!existingUser) {
-          // Check if setup has been completed (any users exist)
+          // No users at all means the initial OWNER hasn't been set up yet.
           const userCount = await prisma.user.count();
+          if (userCount === 0) return "/login?error=SetupRequired";
 
-          // Block Google sign-in if no users exist - require setup first
-          if (userCount === 0) {
-            throw new Error("SetupRequired");
-          }
-
-          // Create new Google user as PARTNER (setup already done)
-          await prisma.user.create({
-            data: {
-              email: user.email!,
-              name: user.name || profile?.name || "User",
-              image: user.image,
-              role: "PARTNER",
-            },
-          });
+          // Invite-only: the owner must create the user first (npm run create-user).
+          return "/login?error=NotInvited";
         }
       }
       return true;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cn, formatDate } from '@/lib/utils';
+import { cn, formatDate, escapeHtml } from '@/lib/utils';
 
 describe('Utility Functions', () => {
   describe('cn function', () => {
@@ -29,6 +29,20 @@ describe('Utility Functions', () => {
       const formatted = formatDate(dateStr);
       expect(formatted).toBeDefined();
       expect(typeof formatted).toBe('string');
+    });
+  });
+
+  describe('escapeHtml function', () => {
+    it('escapes HTML special characters', () => {
+      expect(escapeHtml(`<script>alert("x")</script> & 'y'`)).toBe(
+        '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;y&#39;'
+      );
+    });
+
+    it('leaves plain text unchanged and handles null', () => {
+      expect(escapeHtml('Maria Santos')).toBe('Maria Santos');
+      expect(escapeHtml(null)).toBe('');
+      expect(escapeHtml(42)).toBe('42');
     });
   });
 });

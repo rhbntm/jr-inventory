@@ -113,4 +113,39 @@ describe('MovementRepo Logic (Integration)', () => {
       priceAtMovement: 100,
     }, testUser.id)).rejects.toThrowError(ApiError);
   });
+
+  it('rejects an OUT movement that would sell reserved units', async () => {
+    // 10 on hand, 8 reserved → only 2 available
+    await db.productVariant.update({ where: { id: testVariant.id }, data: { reservedStock: 8 } });
+
+    await expect(MovementRepo.createMovement({
+      variantId: testVariant.id,
+      type: 'OUT',
+      quantity: 3,
+    }, testUser.id)).rejects.toMatchObject({ statusCode: 422 });
+
+    const unchanged = await db.productVariant.findUnique({ where: { id: testVariant.id } });
+    expect(unchanged?.currentStock).toBe(10);
+
+    // Selling exactly the available amount still works
+    await MovementRepo.createMovement({ variantId: testVariant.id, type: 'OUT', quantity: 2 }, testUser.id);
+    const after = await db.productVariant.findUnique({ where: { id: testVariant.id } });
+    expect(after?.currentStock).toBe(8);
+  });
+
+  it('allows an ADJUSTMENT down to 0', async () => {
+    await MovementRepo.createMovement({ variantId: testVariant.id, type: 'ADJUSTMENT', quantity: 0 }, testUser.id);
+    const updated = await db.productVariant.findUnique({ where: { id: testVariant.id } });
+    expect(updated?.currentStock).toBe(0);
+  });
+
+  it('rejects an ADJUSTMENT below the reserved quantity', async () => {
+    await db.productVariant.update({ where: { id: testVariant.id }, data: { reservedStock: 4 } });
+
+    await expect(MovementRepo.createMovement({
+      variantId: testVariant.id,
+      type: 'ADJUSTMENT',
+      quantity: 3,
+    }, testUser.id)).rejects.toMatchObject({ statusCode: 422 });
+  });
 });

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { escapeHtml } from "@/lib/utils";
 
 export async function GET(
@@ -9,8 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
+    try {
+      await requireAuth();
+    } catch {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 

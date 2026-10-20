@@ -117,7 +117,11 @@ Required env vars for Docker (set in `.env`):
 
 ### Users and Google sign-in
 
-Google sign-in is **invite-only**: a Google account can sign in only if its email already exists in the users table. To invite a partner, create them without a password:
+Google sign-in is **invite-only**: a Google account can sign in only if its email already exists in the users table.
+
+Owners manage access in **Settings → Users**: invite someone by their Gmail address, change their role, or remove them. Removed users lose access on their next request; their past stock movements stay in the history.
+
+From the command line (e.g. to create the first owner), create a user without a password to invite them for Google sign-in:
 
 ```bash
 npm run create-user -- --email partner@gmail.com --name "Partner Name" --role PARTNER

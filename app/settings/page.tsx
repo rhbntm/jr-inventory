@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Download, AlertTriangle, DatabaseBackup, Trash2 } from "lucide-react";
+import { UsersCard } from "@/components/users-card";
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -96,6 +97,8 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        <UsersCard currentUserId={session?.user?.id} />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -120,16 +120,26 @@ export const authOptions: NextAuthOptions = {
 
 export async function requireAuth() {
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  if (!session?.user?.id) {
     throw new ApiError(401, "Unauthorized");
   }
+
+  // Sessions live in a signed cookie (JWT), so a removed user or a changed role
+  // would otherwise keep working until the cookie expires. Check the database so
+  // removals and role changes take effect on the next request.
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+  if (!dbUser) {
+    throw new ApiError(401, "Unauthorized");
+  }
+  session.user.role = dbUser.role;
+
   return session;
 }
 
-/**
- * requireRole checks if the authenticated user has one of the allowed roles.
- * Currently unused, but preserved and documented for future role-gating requirements (e.g. Owner vs Partner access).
- */
+/** Checks that the authenticated user has one of the allowed roles (403 otherwise). */
 export async function requireRole(...allowedRoles: Array<"OWNER" | "PARTNER">) {
   const session = await requireAuth();
   const userRole = session.user.role as "OWNER" | "PARTNER";

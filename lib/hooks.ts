@@ -25,7 +25,10 @@ import type {
   ManualBatchInput,
   SettingsMarkupInput,
   ConditionAdjustInput,
+  InviteUserInput,
+  UpdateUserInput,
 } from "./schemas";
+import type { PublicUser } from "@/app/repositories/userRepo";
 
 export const queryKeys = {
   dashboard: ["dashboard"] as const,
@@ -431,5 +434,45 @@ export function useUpdateMarkupSettings() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: settingsQueryKeys.markup });
     },
+  });
+}
+
+// ─── Users (OWNER only) ───────────────────────────────────────────────────────
+
+export const userQueryKeys = {
+  all: ["users"] as const,
+};
+
+export function useUsers(enabled = true) {
+  return useQuery({
+    queryKey: userQueryKeys.all,
+    queryFn: () => apiFetch<PublicUser[]>("/api/users"),
+    enabled,
+  });
+}
+
+export function useInviteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: InviteUserInput) =>
+      apiFetch<PublicUser>("/api/users", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: userQueryKeys.all }); },
+  });
+}
+
+export function useUpdateUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateUserInput }) =>
+      apiFetch<PublicUser>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: userQueryKeys.all }); },
+  });
+}
+
+export function useRemoveUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/users/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: userQueryKeys.all }); },
   });
 }

@@ -129,5 +129,25 @@ export const updateReservationSchema = z.object({
   restock: z.boolean().optional(),
 });
 
+export const userRoleSchema = z.enum(["OWNER", "PARTNER"]);
+
+export const inviteUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
+  name: z.string().trim().min(1, "Name is required"),
+  role: userRoleSchema.default("PARTNER"),
+  // Optional: without a password the user can only sign in with Google.
+  password: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().min(8, "Password must be at least 8 characters").optional()
+  ),
+});
+
+export const updateUserSchema = z.object({
+  role: userRoleSchema,
+});
+
+export type InviteUserInput = z.infer<typeof inviteUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;
 export type UpdateReservationInput = z.infer<typeof updateReservationSchema>;

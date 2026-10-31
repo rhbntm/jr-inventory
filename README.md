@@ -4,13 +4,12 @@ An inventory management platform built for a friend's clothing business — spec
 
 ## Features
 
-- **Live Selling Mode** — Rapid stock-out entry during Shopee live streams, using `salePrice` instead of the regular price when set
+- **Live** — One screen for selling, reserving and receiving stock during Shopee live streams, using `salePrice` instead of the regular price when set, with undo for mistaken entries
 - **Variant-Level Tracking** — SKU-based stock management by Size / Color / Fabric combinations
 - **Batch Intake Wizard** — 5-step flow for receiving ukay/RTW bales: details → weighing estimate → damages → variant assignment → confirm
 - **Stock Movements** — Immutable audit trail of `IN` / `OUT` / `ADJUSTMENT` transactions with price snapshot at movement time for accurate profit history
 - **Reservations** — Customer hold system with full state machine (`RESERVED → SHIPPING → SHIPPED`, with `RELEASED`, `CANCELLED`, and `RETURNED` paths)
 - **Analytics Dashboard** — Revenue, profit, stock trend visualization, top performers, slow movers, and batch damage rates
-- **Quick Reserve** — Fast customer reservation entry from a single page
 - **PWA Support** — Offline-capable, installable on mobile via Serwist (service worker)
 - **Excel Export** — Generate reports for Shopee reconciliation
 - **Role-Based Access** — `OWNER` and `PARTNER` roles with Google OAuth and email/password authentication
@@ -36,13 +35,12 @@ An inventory management platform built for a friend's clothing business — spec
 app/
 ├── api/              # API route handlers (products, variants, batches, movements, reservations, …)
 ├── batches/          # Batch intake wizard UI
-├── dashboard/        # Analytics dashboard
+├── dashboard/        # Today: what needs doing, stock value, recent activity
 ├── analytics/        # Detailed analytics pages
+├── live/             # Sell, reserve and receive stock during a live session
 ├── movements/        # Stock movement log
 ├── products/         # Product & variant management
 ├── reservations/     # Reservation management
-├── quick-reserve/    # Fast reservation entry
-├── stock/            # Stock adjustment views
 ├── categories/       # Category management
 ├── settings/         # Markup & system settings
 └── export/           # Excel report generation

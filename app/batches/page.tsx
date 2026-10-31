@@ -14,9 +14,9 @@ export default function BatchesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Batches</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link href="/batches/new/manual">
             <Button id="manual-tally-btn" variant="outline">
               <ListTodo className="mr-2 h-4 w-4" />
@@ -44,7 +44,7 @@ export default function BatchesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Use the Bale Counting Wizard to receive and record a new stock batch.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <Link href="/batches/new/manual">
                 <Button id="manual-tally-empty-btn" variant="outline">
                   <ListTodo className="mr-2 h-4 w-4" /> Manual Tally
@@ -70,7 +70,7 @@ export default function BatchesPage() {
                 <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <CardTitle className="text-base">
                         {batch.supplierName ?? "Unknown Supplier"}
                       </CardTitle>

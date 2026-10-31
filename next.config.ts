@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   turbopack: {},
   allowedDevOrigins: ["192.168.1.5"],
+  // Quick Stock and Quick Reserve became modes of Live. Old bookmarks and installed
+  // app shortcuts keep working.
+  async redirects() {
+    return [
+      { source: "/stock", destination: "/live", permanent: false },
+      { source: "/quick-reserve", destination: "/live?mode=reserve", permanent: false },
+    ];
+  },
 };
 
 const withSerwist = withSerwistInit({

@@ -30,57 +30,78 @@ export class VariantRepo {
   }
 
   /**
-   * Transfer good-condition units to stained or damaged buckets.
-   * Creates an ADJUSTMENT StockMovement for the audit trail.
-   * The total of (toStained + toDamaged) must not exceed available currentStock.
+   * Corrects good stock on hand and/or moves good units to the stained or damaged buckets.
+   * Stock in/out would count as receiving or selling, so a correction is an ADJUSTMENT,
+   * which sales totals ignore. Each kind of change gets its own audit entry.
+   *
+   * The change is applied to whatever the stock is now, in one statement, so a sale made
+   * while someone is counting isn't overwritten. Units held for reservations are off limits.
    */
   static async adjustConditionStock(
     id: string,
-    { toStained, toDamaged, note }: { toStained: number; toDamaged: number; note?: string | null },
+    {
+      stockChange = 0,
+      toStained,
+      toDamaged,
+      note,
+    }: { stockChange?: number; toStained: number; toDamaged: number; note?: string | null },
     userId: string,
   ) {
-    const total = toStained + toDamaged;
-    if (total <= 0) throw new ApiError(400, "Nothing to transfer");
-
-    const variant = await db.productVariant.findUnique({ where: { id } });
-    if (!variant) throw new ApiError(404, "Variant not found");
-
-    const available = variant.currentStock - variant.reservedStock;
-    if (available < total) {
-      throw new ApiError(
-        409,
-        `Not enough available stock. Available: ${available}, Requested: ${total}`,
-      );
-    }
+    const moved = toStained + toDamaged;
+    if (stockChange === 0 && moved <= 0) throw new ApiError(400, "Nothing to change");
 
     return db.$transaction(async (tx) => {
-      // Decrement good stock and increment condition buckets
-      await tx.productVariant.update({
-        where: { id },
-        data: {
-          currentStock: { decrement: total },
-          stainedStock: { increment: toStained },
-          damagedStock: { increment: toDamaged },
-        },
-      });
+      const updated = await tx.$queryRaw<
+        Array<{ currentStock: number; price: unknown; costPrice: unknown }>
+      >`
+        UPDATE product_variants
+        SET "currentStock" = "currentStock" + ${stockChange} - ${moved},
+            "stainedStock" = "stainedStock" + ${toStained},
+            "damagedStock" = "damagedStock" + ${toDamaged},
+            "updatedAt" = NOW() AT TIME ZONE 'UTC'
+        WHERE id = ${id} AND "currentStock" + ${stockChange} - "reservedStock" >= ${moved}
+        RETURNING "currentStock", price, "costPrice"
+      `;
 
-      // Write a single ADJUSTMENT movement to record the transfer
-      const parts: string[] = [];
-      if (toStained > 0) parts.push(`${toStained} → Stained`);
-      if (toDamaged > 0) parts.push(`${toDamaged} → Damaged`);
-      const autoNote = `Condition adjustment: ${parts.join(", ")}${note ? ` — ${note}` : ""}`;
+      if (updated.length === 0) {
+        const variant = await tx.productVariant.findUnique({ where: { id } });
+        if (!variant) throw new ApiError(404, "Variant not found");
+        const available = variant.currentStock - variant.reservedStock;
+        throw new ApiError(
+          409,
+          `Not enough available stock. Available: ${available}, Reserved: ${variant.reservedStock}`,
+        );
+      }
 
-      await tx.stockMovement.create({
-        data: {
-          variantId: id,
-          type: "ADJUSTMENT",
-          quantity: total,
-          priceAtMovement: Number(variant.price),
-          costPriceAtMovement: Number(variant.costPrice),
-          note: autoNote,
-          userId,
-        },
-      });
+      const { currentStock, price, costPrice } = updated[0];
+      const suffix = note ? ` — ${note}` : "";
+      const audit = { variantId: id, type: "ADJUSTMENT" as const, priceAtMovement: Number(price), costPriceAtMovement: Number(costPrice), userId };
+
+      if (stockChange !== 0) {
+        const signed = stockChange > 0 ? `+${stockChange}` : `${stockChange}`;
+        const onHand = currentStock + moved;
+        await tx.stockMovement.create({
+          data: {
+            ...audit,
+            // For an adjustment the quantity is the new stock level.
+            quantity: onHand,
+            note: `Stock adjustment: ${signed}, now ${onHand}${suffix}`,
+          },
+        });
+      }
+
+      if (moved > 0) {
+        const parts: string[] = [];
+        if (toStained > 0) parts.push(`${toStained} → Stained`);
+        if (toDamaged > 0) parts.push(`${toDamaged} → Damaged`);
+        await tx.stockMovement.create({
+          data: {
+            ...audit,
+            quantity: moved,
+            note: `Condition adjustment: ${parts.join(", ")}${suffix}`,
+          },
+        });
+      }
 
       return tx.productVariant.findUnique({
         where: { id },

@@ -2,8 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { AppSidebar } from "@/components/app-sidebar";
-import { ErrorBoundary } from "@/components/error-boundary";
+import { AppShell } from "@/components/app-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -44,12 +43,7 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background">
         <Providers>
-          <div className="flex min-h-screen">
-            <AppSidebar />
-            <main className="flex-1 lg:ml-64 p-6 pt-20 lg:pt-6">
-              <ErrorBoundary>{children}</ErrorBoundary>
-            </main>
-          </div>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

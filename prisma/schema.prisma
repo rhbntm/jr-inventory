@@ -148,6 +148,9 @@ model StockMovement {
   userId    String?
   batchId   String?
   createdAt DateTime     @default(now())
+  /// Set on an undone movement and on the movement that reversed it. Both stay in
+  /// the audit trail, but sales totals and trends must skip them.
+  voidedAt  DateTime?
 
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)

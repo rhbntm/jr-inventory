@@ -7,12 +7,9 @@ import {
   useProduct,
   useDeleteProduct,
   useDeleteVariant,
-  useAdjustConditionStock,
 } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,187 +29,12 @@ import {
   Trash2,
   Droplets,
   ShieldAlert,
-  ArrowRightLeft,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { VariantForm } from "@/components/variant-form";
+import { AdjustStockDialog } from "@/components/adjust-stock-dialog";
 import { ProductVariant } from "@prisma/client";
 import { cn, formatDate } from "@/lib/utils";
-
-// ─── Condition Adjust Dialog ─────────────────────────────────────────────────
-
-type VariantForDialog = ProductVariant & { reservedStock?: number };
-
-function ConditionAdjustDialog({
-  variant,
-  open,
-  onClose,
-}: {
-  variant: VariantForDialog | null;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const adjustCondition = useAdjustConditionStock();
-  const [toStained, setToStained] = useState("");
-  const [toDamaged, setToDamaged] = useState("");
-  const [note, setNote] = useState("");
-
-  if (!variant) return null;
-
-  const available = variant.currentStock - (variant.reservedStock ?? 0);
-  const stainedVal = Math.max(0, parseInt(toStained) || 0);
-  const damagedVal = Math.max(0, parseInt(toDamaged) || 0);
-  const total = stainedVal + damagedVal;
-  const isOverLimit = total > available;
-  const canSubmit = total > 0 && !isOverLimit && !adjustCondition.isPending;
-
-  function handleClose() {
-    setToStained("");
-    setToDamaged("");
-    setNote("");
-    onClose();
-  }
-
-  async function handleSubmit() {
-    if (!canSubmit) return;
-    try {
-      await adjustCondition.mutateAsync({
-        id: variant!.id,
-        data: { toStained: stainedVal, toDamaged: damagedVal, note: note || null },
-      });
-      toast.success("Condition stock updated");
-      handleClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to adjust stock");
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ArrowRightLeft className="h-5 w-5 text-primary" />
-            Adjust Condition
-          </DialogTitle>
-          <DialogDescription>
-            Transfer good-condition units into the Stained or Damaged buckets.
-            This creates an audit entry in stock history.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Current stock summary */}
-        <div className="grid grid-cols-3 gap-2 my-2">
-          <div className="rounded-lg border bg-muted/30 p-3 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Good</p>
-            <p className="text-2xl font-bold text-green-600">{available}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">available</p>
-          </div>
-          <div className="rounded-lg border bg-amber-500/5 border-amber-500/30 p-3 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Stained</p>
-            <p className="text-2xl font-bold text-amber-500">
-              {(variant as ProductVariant & { stainedStock?: number }).stainedStock ?? 0}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">current</p>
-          </div>
-          <div className="rounded-lg border bg-destructive/5 border-destructive/30 p-3 text-center">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Damaged</p>
-            <p className="text-2xl font-bold text-destructive">
-              {(variant as ProductVariant & { damagedStock?: number }).damagedStock ?? 0}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">current</p>
-          </div>
-        </div>
-
-        {/* Inputs */}
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="cond-stained"
-                className="flex items-center gap-1.5 text-amber-600"
-              >
-                <Droplets className="h-4 w-4" />
-                Move to Stained
-              </Label>
-              <Input
-                id="cond-stained"
-                type="number"
-                min="0"
-                max={available}
-                placeholder="0"
-                value={toStained}
-                onChange={(e) => setToStained(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="cond-damaged"
-                className="flex items-center gap-1.5 text-destructive"
-              >
-                <ShieldAlert className="h-4 w-4" />
-                Move to Damaged
-              </Label>
-              <Input
-                id="cond-damaged"
-                type="number"
-                min="0"
-                max={available}
-                placeholder="0"
-                value={toDamaged}
-                onChange={(e) => setToDamaged(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Running total / validation */}
-          {total > 0 && (
-            <div
-              className={cn(
-                "text-sm px-3 py-2 rounded-md border font-medium",
-                isOverLimit
-                  ? "bg-destructive/10 border-destructive/40 text-destructive"
-                  : "bg-muted/50 border-border text-foreground",
-              )}
-            >
-              {isOverLimit
-                ? `⚠ Total (${total}) exceeds available stock (${available})`
-                : `Transferring ${total} of ${available} available units`}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="cond-note">Reason / Note (optional)</Label>
-            <Input
-              id="cond-note"
-              placeholder="e.g. Dropped in transit, washing accident..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <DialogFooter className="mt-2">
-          <Button variant="outline" onClick={handleClose} disabled={adjustCondition.isPending}>
-            Cancel
-          </Button>
-          <Button
-            id="cond-submit"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-          >
-            {adjustCondition.isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</>
-            ) : (
-              <><ArrowRightLeft className="mr-2 h-4 w-4" /> Confirm Transfer</>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -227,7 +49,7 @@ export default function ProductDetailPage() {
   const [variantToDelete, setVariantToDelete] = useState<string | null>(null);
   const [showVariantForm, setShowVariantForm] = useState(false);
   const [variantToEdit, setVariantToEdit] = useState<ProductVariant | null>(null);
-  const [variantForCondition, setVariantForCondition] = useState<VariantForDialog | null>(null);
+  const [variantForCondition, setVariantForCondition] = useState<ProductVariant | null>(null);
 
   if (isLoading) {
     return (
@@ -378,15 +200,6 @@ export default function ProductDetailPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Adjust condition"
-                          onClick={() => setVariantForCondition(v)}
-                        >
-                          <ArrowRightLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
                           className="h-8 w-8"
                           onClick={() => setVariantToEdit(variant)}
                         >
@@ -504,6 +317,14 @@ export default function ProductDetailPage() {
                           {stained + damaged} unit{stained + damaged !== 1 ? "s" : ""} in condition stock — sell at discount or write off
                         </p>
                       )}
+
+                      <Button
+                        variant="outline"
+                        className="h-11 w-full"
+                        onClick={() => setVariantForCondition(variant)}
+                      >
+                        Adjust stock
+                      </Button>
                     </div>
 
                     <div className="text-xs text-muted-foreground pt-1">
@@ -517,8 +338,7 @@ export default function ProductDetailPage() {
         )}
       </div>
 
-      {/* Condition Adjust Dialog */}
-      <ConditionAdjustDialog
+      <AdjustStockDialog
         variant={variantForCondition}
         open={!!variantForCondition}
         onClose={() => setVariantForCondition(null)}

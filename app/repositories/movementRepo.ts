@@ -2,7 +2,81 @@ import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 import type { MovementInput } from '@/lib/schemas';
 
+/** How long after recording a movement its author can still undo it. */
+export const UNDO_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 export class MovementRepo {
+  /**
+   * Reverses a stock movement recorded by mistake. The original row stays in the audit
+   * trail, a reversing row is added, and both are marked voided so totals skip them.
+   * Only plain stock in/out can be undone: batch and reservation movements are owned by
+   * those flows, and reversing them here would leave those records wrong.
+   */
+  static async undoMovement(id: string, userId: string) {
+    return await db.$transaction(async (tx) => {
+      const original = await tx.stockMovement.findUnique({ where: { id } });
+      if (!original) {
+        throw new ApiError(404, 'Movement not found');
+      }
+      if (original.userId !== userId) {
+        throw new ApiError(403, 'You can only undo movements you recorded');
+      }
+      const note = original.note ?? '';
+      const ownedByAnotherFlow =
+        original.batchId !== null ||
+        note.startsWith('Reservation #') ||
+        note.startsWith('Return from Reservation #');
+      if (original.type === 'ADJUSTMENT' || ownedByAnotherFlow) {
+        throw new ApiError(422, 'This movement cannot be undone');
+      }
+      if (Date.now() - original.createdAt.getTime() > UNDO_WINDOW_MS) {
+        throw new ApiError(422, 'This movement is too old to undo. Record an adjustment instead.');
+      }
+
+      // Claiming the row first means two undo requests can't both reverse it.
+      const now = new Date();
+      const claimed = await tx.stockMovement.updateMany({
+        where: { id, voidedAt: null },
+        data: { voidedAt: now },
+      });
+      if (claimed.count === 0) {
+        throw new ApiError(409, 'This movement was already undone');
+      }
+
+      const { variantId, quantity } = original;
+      if (original.type === 'OUT') {
+        await tx.productVariant.update({
+          where: { id: variantId },
+          data: { currentStock: { increment: quantity } },
+        });
+      } else {
+        // Removing received stock must not eat into units sold or held since then.
+        const updated = await tx.$executeRaw`
+          UPDATE product_variants
+          SET "currentStock" = "currentStock" - ${quantity}, "updatedAt" = NOW() AT TIME ZONE 'UTC'
+          WHERE id = ${variantId} AND "currentStock" - "reservedStock" >= ${quantity}
+        `;
+        if (updated === 0) {
+          throw new ApiError(422, 'Cannot undo: some of this stock has already been sold or reserved');
+        }
+      }
+
+      return await tx.stockMovement.create({
+        data: {
+          variantId,
+          type: original.type === 'OUT' ? 'IN' : 'OUT',
+          quantity,
+          priceAtMovement: original.priceAtMovement,
+          costPriceAtMovement: original.costPriceAtMovement,
+          note: `Undo of movement ${id}`,
+          userId,
+          voidedAt: now,
+        },
+        include: { variant: { include: { product: true } }, user: true },
+      });
+    });
+  }
+
   /**
    * Creates a stock movement and updates the variant's current stock atomically.
    * Mirrors the logic that currently lives in `app/api/movements/route.ts`.

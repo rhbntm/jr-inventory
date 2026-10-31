@@ -5,6 +5,7 @@ import { useDashboard } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { BatchAnalytics } from "@/components/batch-analytics";
 import {
   BarChart,
   Bar,
@@ -108,12 +109,12 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
           <p className="text-muted-foreground">Business intelligence and performance metrics</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex bg-muted rounded-lg p-1">
             <Button
               variant={timeRange === "week" ? "secondary" : "ghost"}
@@ -471,6 +472,8 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <BatchAnalytics />
     </div>
   );
 }

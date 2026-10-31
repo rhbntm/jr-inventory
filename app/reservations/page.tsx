@@ -1,554 +1,454 @@
 "use client";
 
-import { useState } from "react";
-import { useReservations, useUpdateReservation, useProducts } from "@/lib/hooks";
-import type { ReservationWithDetails } from "@/lib/types";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Truck,
-  CheckCircle2,
-  XCircle,
-  Undo2,
-  Lock,
-  ChevronDown,
-  Search,
-  RotateCcw,
-  CalendarCheck2,
-  Printer,
-  Link2,
-} from "lucide-react";
+import { useDeferredValue, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { cn, formatDate } from "@/lib/utils";
+import { useReservationCounts, useReservations, useUpdateReservation } from "@/lib/hooks";
+import {
+  RESERVATION_TABS,
+  daysSince,
+  endOfDayParam,
+  needsFollowUp,
+  startOfDayParam,
+  waitingLabel,
+  type ReservationTabId,
+} from "@/lib/reservations";
+import type { ReservationWithDetails } from "@/lib/types";
+import { peso } from "@/lib/live";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
-export default function ReservationsPage() {
-  // Query Filters State
-  const [stateFilter, setStateFilter] = useState<string>("ALL");
-  const [customerFilter, setCustomerFilter] = useState<string>("");
-  const [variantFilterId, setVariantFilterId] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [page, setPage] = useState<number>(1);
-  const [variantSearchOpen, setVariantSearchOpen] = useState(false);
+type Action = "ship" | "deliver" | "release" | "cancel" | "return";
+type ConfirmableAction = "release" | "cancel" | "return";
 
-  // Queries
-  const { data: productsData } = useProducts({ pageSize: 1000 });
-  const { data: resData, isLoading } = useReservations({
-    state: stateFilter === "ALL" ? undefined : stateFilter,
-    variantId: variantFilterId || undefined,
-    customerName: customerFilter.trim() || undefined,
-    startDate: startDate || undefined,
-    endDate: endDate || undefined,
-    page,
-    pageSize: 10,
-  });
+const CLOSED_LABELS: Partial<Record<ReservationWithDetails["state"], string>> = {
+  RELEASED: "Released",
+  RETURNED: "Returned",
+  CANCELLED: "Cancelled",
+};
 
-  const updateReservation = useUpdateReservation();
+const ROW_COLUMNS =
+  "md:grid md:grid-cols-[minmax(8rem,1fr)_minmax(12rem,1.6fr)_2.75rem_5.5rem_8.5rem_minmax(14rem,auto)] md:items-center md:gap-3";
 
-  // Action Dialog States
-  const [selectedResForCancel, setSelectedResForCancel] = useState<ReservationWithDetails | null>(null);
-  const [selectedResForReturn, setSelectedResForReturn] = useState<ReservationWithDetails | null>(null);
-  const [restockOnReturn, setRestockOnReturn] = useState<boolean>(true);
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+const secondaryButton = cn(
+  "min-h-11 cursor-pointer rounded-lg border border-[#c4cad0] bg-card px-3 font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
+  focusRing
+);
 
-  // Flatten all variants for the filter select
-  const allVariants = productsData?.data.flatMap((product) =>
-    product.variants.map((variant) => ({
-      id: variant.id,
-      label: `${product.name} — ${[variant.size, variant.color, variant.sku].filter(Boolean).join(" / ") || "No details"}`,
-      searchText: `${product.name} ${variant.sku ?? ""} ${variant.size ?? ""} ${variant.color ?? ""}`.toLowerCase(),
-    }))
-  ) ?? [];
+const customerName = (reservation: ReservationWithDetails) => reservation.customerName || "Walk-in";
 
-  const selectedVariantLabel = allVariants.find((v) => v.id === variantFilterId)?.label;
+function itemDetail({ variant }: ReservationWithDetails) {
+  return [variant.size, variant.color, variant.fabric].filter(Boolean).join(", ") || variant.sku || "Standard";
+}
 
-  const handleAction = async (id: string, action: string, restock?: boolean) => {
+function total({ quantity, priceAtReservation, variant }: ReservationWithDetails) {
+  const unit = priceAtReservation ?? variant.salePrice ?? variant.price;
+  return peso(Number(unit) * quantity);
+}
+
+/** When the reservation entered its current stage. */
+function stageStartedAt(reservation: ReservationWithDetails) {
+  if (reservation.state === "SHIPPING") return reservation.shippingAt ?? reservation.reservedAt;
+  if (reservation.state === "SHIPPED") return reservation.shippedAt ?? reservation.reservedAt;
+  return reservation.reservedAt;
+}
+
+function ReservationRow({ reservation }: { reservation: ReservationWithDetails }) {
+  const update = useUpdateReservation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [confirming, setConfirming] = useState<ConfirmableAction | null>(null);
+  const [restock, setRestock] = useState(true);
+
+  const { state, quantity } = reservation;
+  const name = customerName(reservation);
+  const isActive = state === "RESERVED" || state === "SHIPPING";
+  const isClosed = state in CLOSED_LABELS;
+  const days = daysSince(stageStartedAt(reservation));
+  const followUp = needsFollowUp(state, days);
+
+  const run = async (action: Action, successMessage: string) => {
     try {
-      await updateReservation.mutateAsync({
-        id,
-        data: {
-          action: action as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-          restock: restock,
-        },
+      await update.mutateAsync({
+        id: reservation.id,
+        data: { action, ...(action === "return" && { restock }) },
       });
-      toast.success(`Reservation successfully updated to state: ${action.toUpperCase()}`);
+      toast.success(successMessage);
+      setMoreOpen(false);
+      setConfirming(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update reservation");
+      toast.error(err instanceof Error ? err.message : "Couldn't update that reservation");
     }
   };
 
-  const resetFilters = () => {
-    setStateFilter("ALL");
-    setCustomerFilter("");
-    setVariantFilterId("");
-    setStartDate("");
-    setEndDate("");
-    setPage(1);
+  const confirmations: Record<ConfirmableAction, { question: string; label: string; done: string }> = {
+    release: {
+      question: `Release ${quantity} back to available stock?`,
+      label: "Release",
+      done: `${name} released`,
+    },
+    cancel: {
+      question: `Cancel this reservation and free ${quantity} for sale?`,
+      label: "Yes, cancel",
+      done: `${name} cancelled`,
+    },
+    return: {
+      question: `Record a return of ${quantity} from ${name}?`,
+      label: "Record return",
+      done: restock ? `${name} returned and put back in stock` : `${name} returned, not put back in stock`,
+    },
   };
 
-  const getBadgeClass = (state: string) => {
-    switch (state) {
-      case "RESERVED":
-        return "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50";
-      case "SHIPPING":
-        return "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-50";
-      case "SHIPPED":
-        return "bg-green-50 text-green-700 border-green-200 hover:bg-green-50";
-      case "RELEASED":
-        return "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100";
-      case "RETURNED":
-        return "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-50";
-      case "CANCELLED":
-        return "bg-red-50 text-red-700 border-red-200 hover:bg-red-50";
-      default:
-        return "";
-    }
+  const ask = (action: ConfirmableAction) => {
+    setRestock(true);
+    setMoreOpen(false);
+    setConfirming(action);
   };
+
+  const receiptUrl = `/api/reservations/${reservation.id}/receipt`;
+  const stageText = isClosed
+    ? CLOSED_LABELS[state]
+    : followUp
+      ? `${waitingLabel(days)}, follow up`
+      : waitingLabel(days);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reservations</h1>
-          <p className="text-muted-foreground text-sm">
-            Track and manage stock allocations from Reserve to Final Delivery or Return.
-          </p>
-        </div>
-      </div>
-
-      {/* Filter Bar */}
-      <div className="rounded-lg border bg-card p-4 space-y-4 shadow-sm">
-        <div className="flex items-center justify-between border-b pb-2">
-          <h2 className="text-sm font-semibold flex items-center gap-1.5">
-            <CalendarCheck2 className="h-4 w-4 text-muted-foreground" />
-            Filter Allocations
-          </h2>
-          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 px-2 text-xs">
-            <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Reset Filters
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-          {/* Customer Search */}
-          <div className="space-y-1.5">
-            <Label htmlFor="customerFilter">Customer</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="customerFilter"
-                placeholder="Search customer..."
-                value={customerFilter}
-                onChange={(e) => {
-                  setCustomerFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="pl-8 h-9"
-              />
-            </div>
-          </div>
-
-          {/* State Filter */}
-          <div className="space-y-1.5">
-            <Label htmlFor="stateFilter">State</Label>
-            <Select
-              value={stateFilter}
-              onValueChange={(val) => {
-                if (val) {
-                  setStateFilter(val);
-                  setPage(1);
-                }
-              }}
-            >
-              <SelectTrigger id="stateFilter" className="h-9">
-                <SelectValue placeholder="All States" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All States</SelectItem>
-                <SelectItem value="RESERVED">RESERVED</SelectItem>
-                <SelectItem value="SHIPPING">SHIPPING</SelectItem>
-                <SelectItem value="SHIPPED">SHIPPED</SelectItem>
-                <SelectItem value="RELEASED">RELEASED</SelectItem>
-                <SelectItem value="RETURNED">RETURNED</SelectItem>
-                <SelectItem value="CANCELLED">CANCELLED</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Variant Filter */}
-          <div className="space-y-1.5 md:col-span-2">
-            <Label>Product Variant</Label>
-            <Popover open={variantSearchOpen} onOpenChange={setVariantSearchOpen}>
-              <PopoverTrigger className="w-full h-9 flex items-center justify-between rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent text-left truncate">
-                {selectedVariantLabel ? (
-                  <span className="truncate">{selectedVariantLabel}</span>
-                ) : (
-                  <span className="text-muted-foreground">All Variants</span>
-                )}
-                <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
-              </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search variant..." className="h-9" />
-                  <CommandList className="max-h-[250px]">
-                    <CommandEmpty>No variants found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value=""
-                        onSelect={() => {
-                          setVariantFilterId("");
-                          setVariantSearchOpen(false);
-                          setPage(1);
-                        }}
-                      >
-                        All Variants
-                      </CommandItem>
-                      {allVariants.map((v) => (
-                        <CommandItem
-                          key={v.id}
-                          value={v.searchText}
-                          onSelect={() => {
-                            setVariantFilterId(v.id);
-                            setVariantSearchOpen(false);
-                            setPage(1);
-                          }}
-                        >
-                          {v.label}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Date range inputs */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Reservations Table */}
-      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Customer</TableHead>
-              <TableHead>Product / Variant</TableHead>
-              <TableHead className="text-center">Quantity</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Reserved At</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
-                  Loading allocations...
-                </TableCell>
-              </TableRow>
-            ) : !resData?.data?.length ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No reservations found matching active filters.
-                </TableCell>
-              </TableRow>
-            ) : (
-              (resData.data as ReservationWithDetails[]).map((res) => (
-                <TableRow key={res.id}>
-                  <TableCell className="font-semibold text-primary">
-                    {res.customerName || <span className="text-muted-foreground italic">Walk-in</span>}
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-foreground">{res.variant?.product?.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {[res.variant?.size, res.variant?.color, res.variant?.sku]
-                        .filter(Boolean)
-                        .join(" / ") || "No details"}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center font-bold text-sm">
-                    {res.quantity}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn("px-2.5 py-0.5 text-xs font-semibold", getBadgeClass(res.state))}>
-                      {res.state}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {formatDate(res.reservedAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {res.state === "RESERVED" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 h-8 px-2"
-                            onClick={() => handleAction(res.id, "ship")}
-                          >
-                            <Truck className="h-3.5 w-3.5 mr-1" />
-                            Ship
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-slate-700 hover:bg-slate-100 h-8 px-2"
-                            onClick={() => handleAction(res.id, "release")}
-                          >
-                            <Lock className="h-3.5 w-3.5 mr-1" />
-                            Release
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:bg-red-50 border-red-200 h-8 px-2"
-                            onClick={() => setSelectedResForCancel(res)}
-                          >
-                            <XCircle className="h-3.5 w-3.5 mr-1" />
-                            Cancel
-                          </Button>
-                        </>
-                      )}
-                      {res.state === "SHIPPING" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200 h-8 px-2"
-                            onClick={() => handleAction(res.id, "deliver")}
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                            Deliver
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-slate-700 hover:bg-slate-100 h-8 px-2"
-                            onClick={() => handleAction(res.id, "release")}
-                          >
-                            <Lock className="h-3.5 w-3.5 mr-1" />
-                            Release
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:bg-red-50 border-red-200 h-8 px-2"
-                            onClick={() => setSelectedResForCancel(res)}
-                          >
-                            <XCircle className="h-3.5 w-3.5 mr-1" />
-                            Cancel
-                          </Button>
-                        </>
-                      )}
-                      {res.state === "SHIPPED" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 h-8 px-2"
-                          onClick={() => {
-                            setSelectedResForReturn(res);
-                            setRestockOnReturn(true);
-                          }}
-                        >
-                          <Undo2 className="h-3.5 w-3.5 mr-1" />
-                          Return
-                        </Button>
-                      )}
-                      {["RESERVED", "SHIPPING", "SHIPPED"].includes(res.state) && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 h-8 px-2"
-                            onClick={() => window.open(`/api/reservations/${res.id}/receipt`, "_blank")}
-                            title="Print Receipt"
-                          >
-                            <Printer className="h-3.5 w-3.5 mr-1" />
-                            Receipt
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 h-8 px-2"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/api/reservations/${res.id}/receipt`);
-                              toast.success("Receipt link copied");
-                            }}
-                            title="Copy Receipt Link"
-                          >
-                            <Link2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                      {["RELEASED", "RETURNED", "CANCELLED"].includes(res.state) && (
-                        <span className="text-xs text-muted-foreground px-2">Terminal</span>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+    <li className="rounded-[10px] border bg-card md:rounded-none md:border-0 md:border-t md:bg-transparent">
+      <div className={cn("flex flex-col gap-2.5 p-3.5 md:min-h-14 md:px-4 md:py-2", ROW_COLUMNS)}>
+        <div className="flex items-baseline justify-between gap-3 md:contents">
+          <div className="min-w-0 font-semibold max-md:text-base md:truncate">{name}</div>
+          <div
+            className={cn(
+              "order-last text-[13px] md:order-none md:col-start-5 md:row-start-1",
+              followUp ? "font-semibold text-stock-out" : "text-muted-foreground"
             )}
-          </TableBody>
-        </Table>
+          >
+            {stageText}
+          </div>
+        </div>
 
-        {/* Pagination */}
-        {resData && resData.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t p-4">
-            <span className="text-xs text-muted-foreground">
-              Page {resData.page} of {resData.totalPages} ({resData.total} items)
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(resData.totalPages, p + 1))}
-                disabled={page >= resData.totalPages}
-              >
-                Next
-              </Button>
+        <div className="flex items-baseline justify-between gap-3 md:contents">
+          <div className="min-w-0 md:col-start-2 md:row-start-1">
+            <div className="font-medium">
+              <span className="md:hidden">{quantity} × </span>
+              {reservation.variant.product.name}
             </div>
+            <div className="text-[13px] text-muted-foreground">{itemDetail(reservation)}</div>
+          </div>
+          <div className="hidden text-right font-semibold tabular-nums md:col-start-3 md:row-start-1 md:block">
+            {quantity}
+          </div>
+          <div className="shrink-0 font-semibold tabular-nums md:col-start-4 md:row-start-1 md:text-right md:font-normal">
+            {total(reservation)}
+          </div>
+        </div>
+
+        {!isClosed && (
+          <div className="flex gap-2 md:col-start-6 md:row-start-1 md:justify-end">
+            {isActive && (
+              <button
+                type="button"
+                disabled={update.isPending}
+                onClick={() =>
+                  state === "RESERVED"
+                    ? run("ship", `${name} moved to Shipping`)
+                    : run("deliver", `${name} marked as delivered`)
+                }
+                className={cn(
+                  "min-h-11 flex-1 cursor-pointer rounded-lg bg-primary px-3.5 font-semibold whitespace-nowrap text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none",
+                  focusRing
+                )}
+              >
+                {state === "RESERVED" ? "Ship" : "Mark delivered"}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              onClick={() => {
+                setMoreOpen((open) => !open);
+                setConfirming(null);
+              }}
+              className={cn(secondaryButton, !isActive && "flex-1 md:flex-none")}
+            >
+              More
+            </button>
           </div>
         )}
       </div>
 
-      {/* Return Dialog */}
-      <Dialog open={!!selectedResForReturn} onOpenChange={() => setSelectedResForReturn(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Return Items to Inventory</DialogTitle>
-            <DialogDescription>
-              Process a return for reservation of {selectedResForReturn?.quantity} unit(s) of{" "}
-              <strong>{selectedResForReturn?.variant?.product?.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 flex items-center space-x-2.5">
-            <input
-              type="checkbox"
-              id="restockCheckbox"
-              checked={restockOnReturn}
-              onChange={(e) => setRestockOnReturn(e.target.checked)}
-              className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-            <Label htmlFor="restockCheckbox" className="text-sm font-semibold select-none cursor-pointer">
-              Restock returning items back into physical inventory?
-            </Label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedResForReturn(null)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-              onClick={() => {
-                if (selectedResForReturn) {
-                  handleAction(selectedResForReturn.id, "return", restockOnReturn);
-                  setSelectedResForReturn(null);
-                }
-              }}
-            >
-              Confirm Return
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {moreOpen && (
+        <div className="flex flex-wrap justify-end gap-2 px-3.5 pb-3.5 md:px-4">
+          <button
+            type="button"
+            className={secondaryButton}
+            onClick={() => window.open(receiptUrl, "_blank")}
+          >
+            Print receipt
+          </button>
+          <button
+            type="button"
+            className={secondaryButton}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${window.location.origin}${receiptUrl}`);
+                toast.success("Receipt link copied");
+              } catch {
+                toast.error("Couldn't copy the link");
+              }
+            }}
+          >
+            Copy receipt link
+          </button>
+          {isActive ? (
+            <>
+              <button type="button" className={secondaryButton} onClick={() => ask("release")}>
+                Release
+              </button>
+              <button type="button" className={secondaryButton} onClick={() => ask("cancel")}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button type="button" className={secondaryButton} onClick={() => ask("return")}>
+              Return
+            </button>
+          )}
+        </div>
+      )}
 
-      {/* Cancel Dialog */}
-      <Dialog open={!!selectedResForCancel} onOpenChange={() => setSelectedResForCancel(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Reservation</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to cancel the reservation for {selectedResForCancel?.quantity} unit(s) of{" "}
-              <strong>{selectedResForCancel?.variant?.product?.name}</strong>?
-              This will immediately release the reserved stock back into available stock.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedResForCancel(null)}>
-              No, Keep
-            </Button>
-            <Button
-              variant="destructive"
+      {confirming && (
+        <div
+          role="group"
+          aria-label={confirmations[confirming].question}
+          className="flex flex-wrap items-center justify-end gap-3 rounded-b-[10px] bg-background px-3.5 py-3 md:rounded-none md:px-4"
+        >
+          <span className="min-w-52 flex-1 font-medium">{confirmations[confirming].question}</span>
+          {confirming === "return" && (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                checked={restock}
+                onChange={(event) => setRestock(event.target.checked)}
+                className="size-4.5"
+              />
+              Put back in stock
+            </label>
+          )}
+          <button type="button" className={secondaryButton} onClick={() => setConfirming(null)}>
+            Keep it
+          </button>
+          <button
+            type="button"
+            disabled={update.isPending}
+            onClick={() => run(confirming, confirmations[confirming].done)}
+            className={cn(
+              "min-h-11 cursor-pointer rounded-lg bg-stock-out px-3.5 font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+              focusRing
+            )}
+          >
+            {confirmations[confirming].label}
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+export default function ReservationsPage() {
+  const [tab, setTab] = useState<ReservationTabId>("RESERVED");
+  const [search, setSearch] = useState("");
+  const [showDates, setShowDates] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(search);
+
+  const currentTab = RESERVATION_TABS.find((item) => item.id === tab) ?? RESERVATION_TABS[0];
+  const { data: counts } = useReservationCounts();
+  const { data, isLoading, isError, refetch } = useReservations({
+    state: currentTab.states.join(","),
+    search: deferredSearch.trim() || undefined,
+    startDate: startOfDayParam(startDate),
+    endDate: endOfDayParam(endDate),
+    sort: currentTab.oldestFirst ? "oldest" : undefined,
+    page,
+    pageSize: 20,
+  });
+
+  const rows = data?.data ?? [];
+  const hasFilters = search.trim() !== "" || startDate !== "" || endDate !== "";
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[26px] leading-tight font-bold tracking-tight lg:text-[32px]">Reservations</h1>
+        <Link
+          href="/live?mode=reserve"
+          className={cn(
+            "inline-flex min-h-11 items-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground hover:opacity-90",
+            focusRing
+          )}
+        >
+          New reservation
+        </Link>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="group"
+          aria-label="Filter by stage"
+          className="grid w-full grid-cols-4 gap-0.5 rounded-[10px] bg-muted p-1 md:flex md:w-auto"
+        >
+          {RESERVATION_TABS.map((item) => {
+            const count = item.states.reduce((sum, state) => sum + (counts?.counts[state] ?? 0), 0);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={tab === item.id}
+                onClick={() => {
+                  setTab(item.id);
+                  setPage(1);
+                }}
+                className={cn(
+                  "flex min-h-11 cursor-pointer flex-col items-center justify-center rounded-[7px] px-1 text-[13px] md:flex-row md:gap-2 md:px-3.5 md:text-sm",
+                  tab === item.id ? "bg-card font-semibold" : "font-medium",
+                  focusRing
+                )}
+              >
+                {item.label}
+                <span className="text-[#4a5158] tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex w-full items-center gap-2 md:w-auto md:min-w-96">
+          <label htmlFor="reservation-search" className="sr-only">Search reservations</label>
+          <input
+            id="reservation-search"
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search customer or item"
+            autoComplete="off"
+            className={cn("h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 max-md:text-base", focusRing)}
+          />
+          <button
+            type="button"
+            aria-expanded={showDates}
+            onClick={() => setShowDates((open) => !open)}
+            className={cn(
+              "min-h-11 cursor-pointer rounded-lg border border-input bg-card px-3.5 font-medium hover:bg-muted",
+              focusRing
+            )}
+          >
+            Dates
+          </button>
+        </div>
+      </div>
+
+      {showDates && (
+        <div className="flex flex-wrap items-end gap-3 rounded-[10px] border bg-card px-4 py-3">
+          {[
+            { id: "reservation-from", label: "From", value: startDate, set: setStartDate },
+            { id: "reservation-to", label: "To", value: endDate, set: setEndDate },
+          ].map((field) => (
+            <div key={field.id} className="flex flex-col gap-1">
+              <label htmlFor={field.id} className="text-[13px] font-medium">{field.label}</label>
+              <input
+                id={field.id}
+                type="date"
+                value={field.value}
+                onChange={(event) => {
+                  field.set(event.target.value);
+                  setPage(1);
+                }}
+                className={cn("h-11 rounded-lg border border-input bg-card px-2.5", focusRing)}
+              />
+            </div>
+          ))}
+          {(startDate || endDate) && (
+            <button
+              type="button"
               onClick={() => {
-                if (selectedResForCancel) {
-                  handleAction(selectedResForCancel.id, "cancel");
-                  setSelectedResForCancel(null);
-                }
+                setStartDate("");
+                setEndDate("");
+                setPage(1);
               }}
+              className="min-h-11 cursor-pointer px-2 font-medium text-stock-in hover:underline"
             >
-              Yes, Cancel Reservation
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              Clear dates
+            </button>
+          )}
+        </div>
+      )}
+
+      <section aria-label="Reservations" className="md:overflow-hidden md:rounded-[10px] md:border md:bg-card">
+        <div className={cn("hidden px-4 py-2.5 text-xs font-medium text-muted-foreground", ROW_COLUMNS)} aria-hidden="true">
+          <span>Customer</span>
+          <span>Item</span>
+          <span className="text-right">Qty</span>
+          <span className="text-right">Total</span>
+          <span>{tab === "CLOSED" ? "Outcome" : "Waiting"}</span>
+          <span />
+        </div>
+
+        {isError ? (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
+            <p>Reservations couldn&apos;t load.</p>
+            <button type="button" className={secondaryButton} onClick={() => refetch()}>
+              Try again
+            </button>
+          </div>
+        ) : isLoading ? (
+          <div className="space-y-2 p-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="rounded-[10px] border bg-card px-4 py-10 text-center text-muted-foreground md:rounded-none md:border-0 md:border-t">
+            {hasFilters ? "No reservations match that search." : "Nothing here right now."}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2 md:gap-0">
+            {(rows as ReservationWithDetails[]).map((reservation) => (
+              <ReservationRow key={reservation.id} reservation={reservation} />
+            ))}
+          </ul>
+        )}
+
+        {data && data.totalPages > 1 && (
+          <div className="flex items-center justify-between gap-3 py-3 md:border-t md:px-4">
+            <span className="text-[13px] text-muted-foreground">
+              Page {data.page} of {data.totalPages}, {data.total} in all
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={secondaryButton}
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className={secondaryButton}
+                disabled={page >= data.totalPages}
+                onClick={() => setPage((current) => Math.min(data.totalPages, current + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

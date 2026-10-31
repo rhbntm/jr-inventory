@@ -108,11 +108,13 @@ export type ManualBatchInput = z.infer<typeof manualBatchSchema>;
 export type SettingsMarkupInput = z.infer<typeof settingsMarkupSchema>;
 
 export const conditionAdjustSchema = z.object({
+  // Correction to good stock on hand: positive adds units, negative removes them.
+  stockChange: z.coerce.number().int().default(0),
   toStained: z.coerce.number().int().min(0).default(0),
   toDamaged: z.coerce.number().int().min(0).default(0),
   note: z.string().trim().nullable().optional(),
-}).refine(d => d.toStained + d.toDamaged > 0, {
-  message: "At least one unit must be transferred",
+}).refine(d => d.stockChange !== 0 || d.toStained + d.toDamaged > 0, {
+  message: "Change the stock or move at least one unit",
 });
 
 export type ConditionAdjustInput = z.infer<typeof conditionAdjustSchema>;

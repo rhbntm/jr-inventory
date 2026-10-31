@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   ProductWithVariants,
   MovementWithDetails,
@@ -12,7 +12,7 @@ import type {
   ReservationWithDetails,
   AvailableStockResponse,
 } from "./types";
-import type { ProductVariant } from "@prisma/client";
+import type { ProductVariant, ReservationState } from "@prisma/client";
 import type {
   ProductInput,
   VariantInput,
@@ -94,6 +94,31 @@ export function useProducts(params: ProductsParams = {}) {
     queryKey: queryKeys.products(finalParams),
     queryFn: () =>
       apiFetch<PaginatedResponse<ProductWithVariants>>(`/api/products?${buildQuery(finalParams)}`),
+  });
+}
+
+/**
+ * Every active product, for searching on the client. The API returns at most 100 per
+ * page, so asking for one big page would silently leave products out.
+ */
+export function useAllProducts(options: { refetchInterval?: number } = {}) {
+  return useQuery({
+    queryKey: ["products", "all"],
+    queryFn: async () => {
+      const products: ProductWithVariants[] = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const result = await apiFetch<PaginatedResponse<ProductWithVariants>>(
+          `/api/products?${buildQuery({ showArchived: false, pageSize: 100, page })}`
+        );
+        products.push(...result.data);
+        totalPages = result.totalPages;
+        page += 1;
+      } while (page <= totalPages);
+      return products;
+    },
+    refetchInterval: options.refetchInterval,
   });
 }
 
@@ -264,6 +289,19 @@ export function useCreateMovement() {
   });
 }
 
+export function useUndoMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<MovementWithDetails>(`/api/movements/${id}/undo`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["movements"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
 // Categories
 export function useCategories() {
   return useQuery({
@@ -372,6 +410,23 @@ export function useReservations(params: Record<string, unknown> = {}) {
     queryKey: queryKeys.reservations(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<ReservationWithDetails>>(`/api/reservations?${buildQuery(params)}`),
+    // Keeps the list steady while a search is typed, but never shows another stage's
+    // rows, whose buttons would act on the wrong thing.
+    placeholderData: (previous, previousQuery) => {
+      const previousParams = previousQuery?.queryKey[1] as Record<string, unknown> | undefined;
+      return previousParams?.state === params.state ? keepPreviousData(previous) : undefined;
+    },
+  });
+}
+
+export function useReservationCounts() {
+  return useQuery({
+    queryKey: ["reservations", "counts"],
+    queryFn: () =>
+      apiFetch<{ counts: Record<ReservationState, number>; oldestReservedAt: string | null }>(
+        "/api/reservations/counts"
+      ),
+    refetchInterval: 30_000,
   });
 }
 

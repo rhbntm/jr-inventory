@@ -26,7 +26,7 @@ export default function MovementsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Stock Movements</h1>
         <Link href="/movements/new">
           <Button>
@@ -75,13 +75,14 @@ export default function MovementsPage() {
                     {m.variant.product.name} — {m.variant.sku ?? "No SKU"}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {m.note ?? "No note"}
+                    {m.note?.startsWith("Undo of movement") ? "Reverses an entry made by mistake" : (m.note ?? "No note")}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {new Date(m.createdAt).toLocaleString()}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {m.voidedAt && <Badge variant="outline">Undone</Badge>}
                   <Badge
                     variant={m.type === "IN" ? "default" : m.type === "OUT" ? "secondary" : "outline"}
                     className="flex items-center gap-1"

@@ -86,6 +86,7 @@ export class DashboardRepo {
         SUM("quantity") as "total"
       FROM "stock_movements"
       WHERE "createdAt" >= ${sevenDaysAgo}
+        AND "voidedAt" IS NULL
       GROUP BY "date", "type"
       ORDER BY "date" ASC
     `;
@@ -144,7 +145,7 @@ export class DashboardRepo {
         v.sku,
         v."currentStock",
         v."reservedStock",
-        (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT') as "last_out"
+        (SELECT TO_CHAR(MAX("createdAt"), 'YYYY-MM-DD') FROM "stock_movements" WHERE "variantId" = v.id AND "type" = 'OUT' AND "voidedAt" IS NULL) as "last_out"
       FROM "product_variants" v
       JOIN "products" p ON v."productId" = p.id
       -- A variant is only slow moving if it has physically available stock to sell
@@ -155,6 +156,7 @@ export class DashboardRepo {
           SELECT 1 FROM "stock_movements" m
           WHERE m."variantId" = v.id
             AND m."type" = 'OUT'
+            AND m."voidedAt" IS NULL
             AND m."createdAt" >= ${thirtyDaysAgo}
         )
       ORDER BY (v."currentStock" - COALESCE(v."reservedStock", 0)) DESC
@@ -177,6 +179,7 @@ export class DashboardRepo {
       WHERE m."type" = 'OUT'
         -- Only sales: batch reversals and damage write-offs carry a batchId
         AND m."batchId" IS NULL
+        AND m."voidedAt" IS NULL
         AND m."createdAt" >= ${todayStart}
     `;
   }
@@ -186,14 +189,15 @@ export class DashboardRepo {
       db.product.count(),
       db.productVariant.count(),
       db.stockMovement.aggregate({
-        where: { type: 'IN', createdAt: { gte: todayStart } },
+        where: { type: 'IN', voidedAt: null, createdAt: { gte: todayStart } },
         _sum: { quantity: true },
       }),
       db.stockMovement.aggregate({
-        where: { type: 'OUT', createdAt: { gte: todayStart } },
+        where: { type: 'OUT', voidedAt: null, createdAt: { gte: todayStart } },
         _sum: { quantity: true },
       }),
       db.stockMovement.findMany({
+        where: { voidedAt: null },
         include: { variant: { include: { product: true } }, user: true },
         orderBy: { createdAt: 'desc' },
         take: 10,

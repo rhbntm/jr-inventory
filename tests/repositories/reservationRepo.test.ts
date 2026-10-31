@@ -225,5 +225,53 @@ describe('ReservationRepo Logic (Integration)', () => {
       const page2 = await ReservationRepo.getReservations({ page: 2, pageSize: 3 });
       expect(page2.data.length).toBe(2);
     });
+
+    describe('tabs', () => {
+      const add = (customerName: string, reservedAt: Date, state: 'RESERVED' | 'RELEASED' | 'CANCELLED' = 'RESERVED') =>
+        db.reservation.create({
+          data: { variantId: testVariant.id, quantity: 1, customerName, state, reservedAt, updatedBy: testUser.id },
+        });
+
+      it('filters on several states at once', async () => {
+        await add('Open', new Date());
+        await add('Released', new Date(), 'RELEASED');
+        await add('Cancelled', new Date(), 'CANCELLED');
+
+        const res = await ReservationRepo.getReservations({ states: ['RELEASED', 'CANCELLED'] });
+
+        expect(res.data.map((r) => r.customerName).sort()).toEqual(['Cancelled', 'Released']);
+      });
+
+      it('searches customers and items, needing every word to match', async () => {
+        await db.productVariant.update({ where: { id: testVariant.id }, data: { color: 'Navy' } });
+        await add('Maria Santos', new Date());
+
+        expect((await ReservationRepo.getReservations({ search: 'maria' })).total).toBe(1);
+        expect((await ReservationRepo.getReservations({ search: 'navy maria' })).total).toBe(1);
+        expect((await ReservationRepo.getReservations({ search: testProduct.name.split(' ')[0] })).total).toBe(1);
+        expect((await ReservationRepo.getReservations({ search: 'navy nobody' })).total).toBe(0);
+      });
+
+      it('can list the oldest first', async () => {
+        await add('Newer', new Date('2026-10-30T00:00:00Z'));
+        await add('Older', new Date('2026-10-01T00:00:00Z'));
+
+        const res = await ReservationRepo.getReservations({ oldestFirst: true });
+
+        expect(res.data.map((r) => r.customerName)).toEqual(['Older', 'Newer']);
+      });
+
+      it('counts per state and finds the oldest still waiting', async () => {
+        const older = new Date('2026-10-01T00:00:00Z');
+        await add('A', older);
+        await add('B', new Date('2026-10-20T00:00:00Z'));
+        await add('C', new Date('2026-09-01T00:00:00Z'), 'CANCELLED');
+
+        const { counts, oldestReservedAt } = await ReservationRepo.getStateCounts();
+
+        expect(counts).toMatchObject({ RESERVED: 2, CANCELLED: 1, SHIPPING: 0 });
+        expect(oldestReservedAt).toEqual(older);
+      });
+    });
   });
 });

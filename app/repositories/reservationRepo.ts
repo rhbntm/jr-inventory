@@ -212,20 +212,40 @@ export class ReservationRepo {
    */
   static async getReservations(filters: {
     state?: ReservationState;
+    states?: ReservationState[];
     variantId?: string;
     startDate?: string | null;
     endDate?: string | null;
     customerName?: string;
+    /** Every word must match the customer, product, SKU, size or color. */
+    search?: string;
+    oldestFirst?: boolean;
     page?: number;
     pageSize?: number;
   }) {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 30));
+    const words = (filters.search ?? '').trim().split(/\s+/).filter(Boolean);
 
     const where: Prisma.ReservationWhereInput = {
       ...(filters.state && { state: filters.state }),
+      ...(filters.states?.length && { state: { in: filters.states } }),
       ...(filters.variantId && { variantId: filters.variantId }),
       ...(filters.customerName && { customerName: { contains: filters.customerName, mode: 'insensitive' } }),
+      ...(words.length > 0 && {
+        AND: words.map((word): Prisma.ReservationWhereInput => {
+          const contains = { contains: word, mode: 'insensitive' as const };
+          return {
+            OR: [
+              { customerName: contains },
+              { variant: { product: { name: contains } } },
+              { variant: { sku: contains } },
+              { variant: { size: contains } },
+              { variant: { color: contains } },
+            ],
+          };
+        }),
+      }),
       ...((filters.startDate || filters.endDate) && {
         reservedAt: {
           ...(filters.startDate && { gte: new Date(filters.startDate) }),
@@ -238,7 +258,7 @@ export class ReservationRepo {
       db.reservation.findMany({
         where,
         include: { variant: { include: { product: true } }, user: true },
-        orderBy: { reservedAt: "desc" },
+        orderBy: { reservedAt: filters.oldestFirst ? "asc" : "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -252,6 +272,35 @@ export class ReservationRepo {
       pageSize,
       totalPages: Math.ceil(total / pageSize),
     };
+  }
+
+  /**
+   * Counts reservations per state, and when the oldest one still waiting to ship was made.
+   */
+  static async getStateCounts() {
+    const [groups, oldest] = await db.$transaction([
+      db.reservation.groupBy({ by: ['state'], orderBy: { state: 'asc' }, _count: { _all: true } }),
+      db.reservation.findFirst({
+        where: { state: 'RESERVED' },
+        orderBy: { reservedAt: 'asc' },
+        select: { reservedAt: true },
+      }),
+    ]);
+
+    const counts: Record<ReservationState, number> = {
+      RESERVED: 0,
+      SHIPPING: 0,
+      SHIPPED: 0,
+      RELEASED: 0,
+      RETURNED: 0,
+      CANCELLED: 0,
+    };
+    for (const group of groups) {
+      const count = group._count;
+      counts[group.state] = typeof count === 'object' ? (count._all ?? 0) : 0;
+    }
+
+    return { counts, oldestReservedAt: oldest?.reservedAt ?? null };
   }
 
   /**

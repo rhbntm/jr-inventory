@@ -7,7 +7,7 @@ import { VariantRepo } from "@/app/repositories/variantRepo";
 type Params = Promise<{ id: string }>;
 
 // PATCH /api/variants/[id]/condition
-// Transfers good-condition units into the stained or damaged buckets.
+// Corrects good stock on hand and/or moves good units into the stained or damaged buckets.
 export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { params: Params }) => {
   const session = await requireAuth();
   const { id } = await params;
@@ -15,7 +15,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { par
 
   const variant = await VariantRepo.adjustConditionStock(
     id,
-    { toStained: data.toStained, toDamaged: data.toDamaged, note: data.note },
+    { stockChange: data.stockChange, toStained: data.toStained, toDamaged: data.toDamaged, note: data.note },
     session.user.id,
   );
 

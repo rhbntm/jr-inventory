@@ -10,12 +10,18 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireAuth();
   const { searchParams } = req.nextUrl;
   
-  const stateRaw = searchParams.get("state");
-  if (stateRaw && !(Object.values(ReservationState) as string[]).includes(stateRaw)) {
-    throw new ApiError(400, `Invalid reservation state: ${stateRaw}`);
+  // One state, or several separated by commas.
+  const stateNames = (searchParams.get("state") ?? "").split(",").filter(Boolean);
+  for (const name of stateNames) {
+    if (!(Object.values(ReservationState) as string[]).includes(name)) {
+      throw new ApiError(400, `Invalid reservation state: ${name}`);
+    }
   }
-  const state = stateRaw ? (stateRaw as ReservationState) : undefined;
-  
+  const states = stateNames as ReservationState[];
+
+  const search = searchParams.get("search") ?? undefined;
+  const oldestFirst = searchParams.get("sort") === "oldest";
+
   const variantId = searchParams.get("variantId") ?? undefined;
   const startDate = searchParams.get("startDate") ?? undefined;
   const endDate = searchParams.get("endDate") ?? undefined;
@@ -24,11 +30,13 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? 30)));
 
   const result = await ReservationRepo.getReservations({
-    state,
+    states,
     variantId,
     startDate,
     endDate,
     customerName,
+    search,
+    oldestFirst,
     page,
     pageSize,
   });

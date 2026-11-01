@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ChevronDown, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
   useAllProducts,
@@ -14,6 +15,7 @@ import {
 import {
   LIVE_MODES,
   describeAction,
+  groupLiveVariants,
   parseLiveMode,
   peso,
   searchVariants,
@@ -21,6 +23,7 @@ import {
   toLiveVariants,
   type LiveEntry,
   type LiveMode,
+  type LiveProduct,
   type LiveVariant,
 } from "@/lib/live";
 import { createReservationSchema, movementSchema } from "@/lib/schemas";
@@ -56,6 +59,91 @@ const entryTime = (entry: LiveEntry) =>
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 const fieldClass = cn("w-full rounded-lg border border-input bg-card px-3 text-base", focusRing);
 
+const leftLabel = (available: number) => (available <= 0 ? "None left" : `${available} left`);
+
+/**
+ * One product in the phone list. Tapping opens its variants, or goes straight to the sale
+ * when there's only one to choose from.
+ */
+function LiveProductRow({
+  group,
+  open,
+  onToggle,
+  onSelect,
+}: {
+  group: LiveProduct;
+  open: boolean;
+  onToggle: () => void;
+  onSelect: (id: string) => void;
+}) {
+  const only = group.variants.length === 1 ? group.variants[0] : null;
+  const panelId = `live-product-${group.productId}`;
+
+  return (
+    <li className="overflow-hidden rounded-[10px] border bg-card">
+      <button
+        type="button"
+        aria-expanded={only ? undefined : open}
+        aria-controls={only ? undefined : panelId}
+        onClick={() => (only ? onSelect(only.id) : onToggle())}
+        className={cn(
+          "flex min-h-16 w-full cursor-pointer items-center gap-3 rounded-[10px] px-3.5 py-2.5 text-left hover:bg-background",
+          focusRing
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold break-words">{group.product}</span>
+          <span className="block text-[13px] text-muted-foreground">
+            {only ? only.label : `${group.variants.length} variants`}
+          </span>
+        </span>
+        <span className={cn("shrink-0 font-bold tabular-nums", group.available <= 0 && "text-stock-out")}>
+          {leftLabel(group.available)}
+        </span>
+        {!only && (
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("size-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          />
+        )}
+      </button>
+      {!only && open && (
+        <ul id={panelId} className="border-t">
+          {group.variants.map((variant) => (
+            <li key={variant.id} className="border-t first:border-t-0">
+              <button
+                type="button"
+                onClick={() => onSelect(variant.id)}
+                className={cn(
+                  "flex min-h-14 w-full cursor-pointer items-center justify-between gap-3 px-3.5 py-2 text-left hover:bg-background",
+                  focusRing
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium break-words">{variant.label}</span>
+                  {(variant.sku || variant.reserved > 0) && (
+                    <span className="block text-[13px] break-words text-muted-foreground">
+                      {[variant.sku, variant.reserved > 0 && `${variant.reserved} reserved`].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 font-semibold tabular-nums",
+                    variant.available <= variant.lowStockAt && "text-stock-out"
+                  )}
+                >
+                  {leftLabel(variant.available)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 export function LiveScreen() {
   const searchParams = useSearchParams();
   const { data: products, isLoading, isError, refetch } = useAllProducts({ refetchInterval: 30_000 });
@@ -73,12 +161,14 @@ export function LiveScreen() {
   const [note, setNote] = useState("");
   const [entries, setEntries] = useState<LiveEntry[]>(loadEntries);
   const [undoingId, setUndoingId] = useState<string | null>(null);
+  const [openProductIds, setOpenProductIds] = useState<Set<string>>(() => new Set());
 
   const searchRef = useRef<HTMLInputElement>(null);
   const quantityRef = useRef<HTMLInputElement>(null);
 
   const variants = useMemo(() => toLiveVariants(products ?? []), [products]);
   const matches = useMemo(() => searchVariants(variants, query), [variants, query]);
+  const productGroups = useMemo(() => groupLiveVariants(variants), [variants]);
   const selected: LiveVariant | undefined = variants.find((variant) => variant.id === selectedId);
   const siblings = selected ? variants.filter((variant) => variant.productId === selected.productId) : [];
 
@@ -183,6 +273,13 @@ export function LiveScreen() {
     }
   };
 
+  const toggleProduct = (id: string) =>
+    setOpenProductIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
   const undo = async (entry: LiveEntry) => {
     setUndoingId(entry.recordId);
     try {
@@ -209,6 +306,23 @@ export function LiveScreen() {
       : selected.salePrice !== null
         ? `Sale, normally ${peso(selected.price)}`
         : "Usual price";
+
+  const lastEntryBar = lastEntry && (
+    <div aria-live="polite" className="flex min-h-11 items-center justify-between gap-2 lg:hidden">
+      <span className="min-w-0 truncate text-[13px]">
+        <strong className="font-bold tabular-nums">{entryQuantity(lastEntry)}</strong>{" "}
+        {lastEntry.product}, {lastEntry.label}
+      </span>
+      <button
+        type="button"
+        disabled={undoingId !== null}
+        onClick={() => undo(lastEntry)}
+        className="min-h-11 shrink-0 cursor-pointer px-2 font-medium text-stock-in disabled:opacity-50"
+      >
+        Undo
+      </button>
+    </div>
+  );
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -272,25 +386,52 @@ export function LiveScreen() {
             />
           </div>
 
+          {isLoading && <p className="p-2 text-muted-foreground">Loading items…</p>}
+          {isError && (
+            <div role="alert" className="space-y-2 p-2">
+              <p>Items couldn&apos;t load.</p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="min-h-11 cursor-pointer rounded-lg border border-input bg-card px-4 font-medium hover:bg-muted"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {/* On a phone, products are listed until one is picked or a search starts. */}
+          {!searching && !selected && !isLoading && !isError && (
+            <div className="flex flex-col gap-2 lg:hidden">
+              {productGroups.length === 0 ? (
+                <p className="px-1 py-4 text-muted-foreground">No items yet. Add products first.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {productGroups.map((group) => (
+                    <LiveProductRow
+                      key={group.productId}
+                      group={group}
+                      open={openProductIds.has(group.productId)}
+                      onToggle={() => toggleProduct(group.productId)}
+                      onSelect={selectVariant}
+                    />
+                  ))}
+                </ul>
+              )}
+              {lastEntry && (
+                <div className="sticky bottom-0 -mx-3 border-t bg-card px-3 pb-[env(safe-area-inset-bottom)]">
+                  {lastEntryBar}
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             className={cn(
               "max-h-[38rem] flex-col gap-1 overflow-y-auto",
               searching ? "flex" : "hidden lg:flex"
             )}
           >
-            {isLoading && <p className="p-2 text-muted-foreground">Loading items…</p>}
-            {isError && (
-              <div role="alert" className="space-y-2 p-2">
-                <p>Items couldn&apos;t load.</p>
-                <button
-                  type="button"
-                  onClick={() => refetch()}
-                  className="min-h-11 cursor-pointer rounded-lg border border-input bg-card px-4 font-medium hover:bg-muted"
-                >
-                  Try again
-                </button>
-              </div>
-            )}
             {matches.slice(0, MAX_RESULTS).map((variant) => (
               <button
                 key={variant.id}
@@ -334,13 +475,24 @@ export function LiveScreen() {
           aria-label="Record"
           className={cn(
             "flex-col gap-5 rounded-[10px] border bg-card p-4 lg:flex lg:p-6",
-            searching ? "hidden" : "flex"
+            searching || !selected ? "hidden" : "flex"
           )}
         >
           {!selected ? (
             <p className="py-10 text-center text-muted-foreground">Search for an item to get started.</p>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className={cn(
+                  "-mt-2 -mb-3 -ml-1 inline-flex min-h-11 w-fit cursor-pointer items-center gap-1 font-medium text-stock-in lg:hidden",
+                  focusRing
+                )}
+              >
+                <ChevronLeft aria-hidden="true" className="size-5" />
+                All items
+              </button>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="text-xl leading-tight font-bold tracking-tight lg:text-2xl">{selected.product}</h2>
@@ -491,22 +643,7 @@ export function LiveScreen() {
 
               {/* On a phone the action stays in reach however long the form gets. */}
               <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col gap-1 rounded-b-[10px] border-t bg-card px-4 pt-2 pb-4 lg:static lg:m-0 lg:border-0 lg:p-0">
-                {lastEntry && (
-                  <div aria-live="polite" className="flex min-h-11 items-center justify-between gap-2 lg:hidden">
-                    <span className="min-w-0 truncate text-[13px]">
-                      <strong className="font-bold tabular-nums">{entryQuantity(lastEntry)}</strong>{" "}
-                      {lastEntry.product}, {lastEntry.label}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={undoingId !== null}
-                      onClick={() => undo(lastEntry)}
-                      className="min-h-11 shrink-0 cursor-pointer px-2 font-medium text-stock-in disabled:opacity-50"
-                    >
-                      Undo
-                    </button>
-                  </div>
-                )}
+                {lastEntryBar}
                 <button
                   type="submit"
                   disabled={!action || action.blocked || pending}

@@ -63,6 +63,36 @@ export function toLiveVariants(products: ProductWithVariants[]): LiveVariant[] {
   );
 }
 
+export type LiveProduct = {
+  productId: string;
+  product: string;
+  /** What can still be sold across its variants, the number that matters mid-stream. */
+  available: number;
+  variants: LiveVariant[];
+};
+
+/** For browsing by product on a phone, where a flat list of every variant is too long. */
+export function groupLiveVariants(variants: LiveVariant[]): LiveProduct[] {
+  const groups = new Map<string, LiveProduct>();
+  for (const variant of variants) {
+    const group = groups.get(variant.productId);
+    if (group) {
+      group.variants.push(variant);
+      group.available += Math.max(0, variant.available);
+    } else {
+      groups.set(variant.productId, {
+        productId: variant.productId,
+        product: variant.product,
+        available: Math.max(0, variant.available),
+        variants: [variant],
+      });
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) =>
+    a.product.localeCompare(b.product, "en", { sensitivity: "base" })
+  );
+}
+
 /** Every word typed has to appear, in any order: "tee black m". */
 export function searchVariants(variants: LiveVariant[], query: string): LiveVariant[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);

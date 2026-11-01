@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   describeAction,
+  groupLiveVariants,
   parseLiveMode,
   searchVariants,
   sessionTotals,
   toLiveVariants,
   type LiveEntry,
+  type LiveVariant,
 } from '@/lib/live';
 import type { ProductWithVariants } from '@/lib/types';
 
@@ -17,6 +19,33 @@ const product = {
     { id: 'c', size: 'XL', color: 'Red', fabric: null, sku: null, currentStock: 9, reservedStock: 0, lowStockAt: 5, price: '299', salePrice: null, isArchived: true },
   ],
 } as unknown as ProductWithVariants;
+
+describe('groupLiveVariants', () => {
+  const variant = (productId: string, name: string, available: number) =>
+    ({ id: `${productId}-${available}`, productId, product: name, available }) as LiveVariant;
+
+  it('groups variants under their product, by name', () => {
+    const groups = groupLiveVariants([
+      variant('t', 'tee', 1),
+      variant('c', 'Croptop', 2),
+      variant('t', 'tee', 3),
+    ]);
+
+    expect(groups.map((g) => [g.product, g.variants.length])).toEqual([['Croptop', 1], ['tee', 2]]);
+  });
+
+  it('totals what can be sold', () => {
+    const [group] = groupLiveVariants([variant('c', 'Croptop', 2), variant('c', 'Croptop', 3)]);
+
+    expect(group.available).toBe(5);
+  });
+
+  it('does not let an over-reserved variant reduce the total', () => {
+    const [group] = groupLiveVariants([variant('c', 'Croptop', -2), variant('c', 'Croptop', 3)]);
+
+    expect(group.available).toBe(3);
+  });
+});
 
 describe('toLiveVariants', () => {
   const variants = toLiveVariants([product]);

@@ -7,7 +7,11 @@ import {
   useProduct,
   useDeleteProduct,
   useDeleteVariant,
+  useSetProductArchived,
+  RequestError,
 } from "@/lib/hooks";
+import { describeStock, reservedBlockMessage, summarizeStock } from "@/lib/archive";
+import { peso } from "@/lib/live";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +25,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Plus,
   Package,
@@ -44,8 +50,11 @@ export default function ProductDetailPage() {
   const { data: product, isLoading } = useProduct(id);
   const deleteProduct = useDeleteProduct();
   const deleteVariant = useDeleteVariant();
+  const setArchived = useSetProductArchived();
 
   const [showDeleteProductDialog, setShowDeleteProductDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [cannotDelete, setCannotDelete] = useState(false);
   const [variantToDelete, setVariantToDelete] = useState<string | null>(null);
   const [showVariantForm, setShowVariantForm] = useState(false);
   const [variantToEdit, setVariantToEdit] = useState<ProductVariant | null>(null);
@@ -80,8 +89,23 @@ export default function ProductDetailPage() {
       toast.success("Product deleted");
       router.push("/products");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete product");
       setShowDeleteProductDialog(false);
+      if (err instanceof RequestError && err.status === 409) {
+        setCannotDelete(true);
+        setShowArchiveDialog(true);
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete product");
+      }
+    }
+  }
+
+  async function handleSetArchived(archived: boolean) {
+    try {
+      await setArchived.mutateAsync({ id, archived });
+      toast.success(archived ? `${product!.name} archived` : `${product!.name} restored`);
+      setShowArchiveDialog(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update product");
     }
   }
 
@@ -96,26 +120,62 @@ export default function ProductDetailPage() {
     }
   }
 
+  const stockSummary = summarizeStock(product.variants);
+  const stockOnHand = describeStock(stockSummary);
+
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <Link href="/products">
           <Button variant="outline" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <h1 className="text-3xl font-bold tracking-tight flex-1">{product.name}</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
-          onClick={() => setShowDeleteProductDialog(true)}
-          disabled={deleteProduct.isPending}
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete
-        </Button>
+        <h1 className="text-3xl font-bold tracking-tight flex-1 min-w-0">{product.name}</h1>
+        {/* Takes its own row on a phone so the name isn't squeezed. */}
+        <div className="flex gap-2 max-sm:w-full max-sm:justify-end">
+          {!product.isArchived && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCannotDelete(false);
+                setShowArchiveDialog(true);
+              }}
+              disabled={setArchived.isPending}
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            onClick={() => setShowDeleteProductDialog(true)}
+            disabled={deleteProduct.isPending}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
       </div>
+
+      {product.isArchived && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+          <div className="text-sm">
+            <p className="font-medium">This product is archived</p>
+            <p className="text-muted-foreground">
+              It can&apos;t be sold or restocked until it&apos;s restored.
+              {stockOnHand && ` Stock on hand: ${stockOnHand}.`}
+            </p>
+          </div>
+          <Button onClick={() => handleSetArchived(false)} disabled={setArchived.isPending}>
+            <ArchiveRestore className="mr-2 h-4 w-4" />
+            {setArchived.isPending ? "Restoring..." : "Restore"}
+          </Button>
+        </div>
+      )}
 
       {/* Product Info */}
       <Card>
@@ -139,21 +199,23 @@ export default function ProductDetailPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Variants</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowVariantForm(!showVariantForm)}
-          >
-            {showVariantForm ? (
-              <X className="mr-2 h-4 w-4" />
-            ) : (
-              <Plus className="mr-2 h-4 w-4" />
-            )}
-            {showVariantForm ? "Cancel" : "Add Variant"}
-          </Button>
+          {!product.isArchived && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowVariantForm(!showVariantForm)}
+            >
+              {showVariantForm ? (
+                <X className="mr-2 h-4 w-4" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              {showVariantForm ? "Cancel" : "Add Variant"}
+            </Button>
+          )}
         </div>
 
-        {showVariantForm && (
+        {showVariantForm && !product.isArchived && (
           <Card>
             <CardContent className="pt-6">
               <VariantForm
@@ -318,13 +380,15 @@ export default function ProductDetailPage() {
                         </p>
                       )}
 
-                      <Button
-                        variant="outline"
-                        className="h-11 w-full"
-                        onClick={() => setVariantForCondition(variant)}
-                      >
-                        Adjust stock
-                      </Button>
+                      {!product.isArchived && !variant.isArchived && (
+                        <Button
+                          variant="outline"
+                          className="h-11 w-full"
+                          onClick={() => setVariantForCondition(variant)}
+                        >
+                          Adjust stock
+                        </Button>
+                      )}
                     </div>
 
                     <div className="text-xs text-muted-foreground pt-1">
@@ -372,6 +436,47 @@ export default function ProductDetailPage() {
               disabled={deleteProduct.isPending}
             >
               {deleteProduct.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Archive Product Dialog */}
+      <Dialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Archive {product.name}?</DialogTitle>
+            <DialogDescription>
+              {cannotDelete && (
+                <span className="mb-2 block font-medium text-foreground">
+                  This product has history, so it can&apos;t be deleted. You can archive it instead.
+                </span>
+              )}
+              It will be hidden from Live, stock forms and low-stock alerts. Its history stays, and you can restore it any time.
+              {stockSummary.reserved > 0 ? (
+                <span className="mt-2 block font-medium text-destructive">
+                  {reservedBlockMessage(stockSummary.reserved)}
+                </span>
+              ) : stockOnHand ? (
+                <span className="mt-2 block font-medium text-foreground">
+                  {stockOnHand}. Good stock worth {peso(stockSummary.goodValueAtCost)} at cost will stay counted.
+                </span>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowArchiveDialog(false)}
+              disabled={setArchived.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleSetArchived(true)}
+              disabled={setArchived.isPending || stockSummary.reserved > 0}
+            >
+              {setArchived.isPending ? "Archiving..." : "Archive"}
             </Button>
           </DialogFooter>
         </DialogContent>

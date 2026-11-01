@@ -699,8 +699,12 @@ export default function ManualBatchPage() {
         }
       };
 
-      await createManualBatch.mutateAsync(payload);
-      toast.success("Manual batch saved successfully!");
+      const saved = await createManualBatch.mutateAsync(payload);
+      toast.success(
+        saved.restoredProductName
+          ? `Manual batch saved. ${saved.restoredProductName} was restored from the archive.`
+          : "Manual batch saved successfully!"
+      );
       router.push("/batches");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save manual batch");

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
 import type { MovementInput } from '@/lib/schemas';
+import { archivedBlockReason } from '@/lib/archive';
 
 /** How long after recording a movement its author can still undo it. */
 export const UNDO_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -84,9 +85,19 @@ export class MovementRepo {
   static async createMovement(data: MovementInput, userId: string) {
     const { variantId, type, quantity, priceAtMovement, note } = data;
 
-    const variant = await db.productVariant.findUnique({ where: { id: variantId } });
+    const variant = await db.productVariant.findUnique({
+      where: { id: variantId },
+      include: { product: { select: { isArchived: true } } },
+    });
     if (!variant) {
       throw new ApiError(404, 'Variant not found');
+    }
+
+    // Corrections stay allowed: an adjustment records what's physically there, even on
+    // an archived product.
+    if (type !== 'ADJUSTMENT') {
+      const blocked = archivedBlockReason(variant, type === 'OUT' ? 'sell' : 'add stock to');
+      if (blocked) throw new ApiError(409, blocked);
     }
 
     // Resolve final price if not supplied – same fallback logic as before

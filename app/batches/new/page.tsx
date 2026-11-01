@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { archivedRestockNotice } from "@/lib/archive";
 import {
   useCreateBatch,
   useProcessBatch,
@@ -633,7 +634,7 @@ export default function NewBatchPage() {
       }
 
       // Step B: Process the batch with assignments
-      await processBatch.mutateAsync({
+      const processed = await processBatch.mutateAsync({
         id,
         data: {
           assignments: assignments
@@ -648,7 +649,13 @@ export default function NewBatchPage() {
         },
       });
 
-      toast.success("Batch saved and stock updated!");
+      // The picker hides archived products, but it may have been opened before one was archived.
+      const archivedNotice = archivedRestockNotice(processed.movements);
+      if (archivedNotice) {
+        toast.warning(archivedNotice);
+      } else {
+        toast.success("Batch saved and stock updated!");
+      }
       router.push("/batches");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save batch");

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import * as XLSX from "xlsx";
 import { withErrorHandler } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
+import { isVariantArchived } from "@/lib/archive";
 
 // GET /api/export — export current stock as Excel (.xlsx)
 export const GET = withErrorHandler(async () => {
@@ -29,6 +30,8 @@ export const GET = withErrorHandler(async () => {
     "Current Stock": v.currentStock,
     "Low Stock At": v.lowStockAt,
     "Category": v.product.category?.name ?? "Uncategorized",
+    // Archived stock stays in the report so it matches inventory value.
+    "Status": isVariantArchived(v) ? "Archived" : "Active",
   }));
 
   // Create workbook and worksheet
@@ -48,6 +51,7 @@ export const GET = withErrorHandler(async () => {
     { wch: 14 }, // Current Stock
     { wch: 12 }, // Low Stock At
     { wch: 20 }, // Category
+    { wch: 10 }, // Status
   ];
   worksheet["!cols"] = colWidths;
 

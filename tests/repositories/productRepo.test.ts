@@ -21,6 +21,12 @@ vi.mock('@/lib/db', () => {
       stockMovement: {
         count: vi.fn(),
       },
+      reservation: {
+        count: vi.fn(),
+      },
+      batchMovement: {
+        count: vi.fn(),
+      },
       $transaction: vi.fn(),
     },
   };
@@ -78,9 +84,13 @@ describe('ProductRepo', () => {
   });
 
   describe('deleteProduct', () => {
-    it('deletes product if no stock history exists', async () => {
+    beforeEach(() => {
       (db.stockMovement.count as any).mockResolvedValue(0);
+      (db.reservation.count as any).mockResolvedValue(0);
+      (db.batchMovement.count as any).mockResolvedValue(0);
+    });
 
+    it('deletes product if no stock history exists', async () => {
       await ProductRepo.deleteProduct('p1');
       
       expect(db.stockMovement.count).toHaveBeenCalledWith({ where: { variant: { productId: 'p1' } } });
@@ -93,6 +103,14 @@ describe('ProductRepo', () => {
       await expect(ProductRepo.deleteProduct('p1')).rejects.toThrowError(ApiError);
       
       expect(db.stockMovement.count).toHaveBeenCalledWith({ where: { variant: { productId: 'p1' } } });
+      expect(db.product.delete).not.toHaveBeenCalled();
+    });
+
+    it.each(['reservation', 'batchMovement'] as const)('throws ApiError if only %s records exist', async (model) => {
+      (db[model].count as any).mockResolvedValue(1);
+
+      await expect(ProductRepo.deleteProduct('p1')).rejects.toMatchObject({ statusCode: 409 });
+
       expect(db.product.delete).not.toHaveBeenCalled();
     });
   });

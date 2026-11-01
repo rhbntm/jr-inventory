@@ -51,13 +51,21 @@ export const settingsQueryKeys = {
   markup: ["settings", "markup"] as const,
 };
 
+/** A failed API call, for callers that need to react to a specific status. */
+export class RequestError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "RequestError";
+  }
+}
+
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
+  if (!res.ok) throw new RequestError(res.status, data.error ?? "Request failed");
   return data as T;
 }
 
@@ -85,6 +93,9 @@ type ProductsParams = {
   categoryId?: string;
   page?: number;
   pageSize?: number;
+  /** List archived products instead of active ones. */
+  archived?: boolean;
+  /** Include each product's archived variants. */
   showArchived?: boolean;
 };
 
@@ -125,8 +136,39 @@ export function useAllProducts(options: { refetchInterval?: number } = {}) {
 export function useProduct(id: string) {
   return useQuery({
     queryKey: queryKeys.product(id),
-    queryFn: () => apiFetch<ProductWithVariants>(`/api/products/${id}`),
+    // Includes archived variants, or there'd be no way to reach one and unarchive it.
+    queryFn: () => apiFetch<ProductWithVariants>(`/api/products/${id}?showArchived=true`),
     enabled: !!id,
+  });
+}
+
+/** The archived product with exactly this name, if any, to head off a duplicate. */
+export function useArchivedProductByName(name: string) {
+  const wanted = name.trim().toLowerCase();
+  return useQuery({
+    queryKey: ["products", "archived-name", wanted],
+    queryFn: async () => {
+      const result = await apiFetch<PaginatedResponse<ProductWithVariants>>(
+        `/api/products?${buildQuery({ search: wanted, archived: true, pageSize: 100 })}`
+      );
+      return result.data.find((product) => product.name.trim().toLowerCase() === wanted) ?? null;
+    },
+    enabled: wanted.length > 0,
+  });
+}
+
+export function useSetProductArchived() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
+      apiFetch<ProductWithVariants>(`/api/products/${id}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
   });
 }
 
@@ -343,7 +385,10 @@ export function useCreateManualBatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: ManualBatchInput) =>
-      apiFetch<BatchWithMovements>("/api/batches/manual", { method: "POST", body: JSON.stringify(data) }),
+      apiFetch<BatchWithMovements & { restoredProductName: string | null }>("/api/batches/manual", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: batchQueryKeys.all });
       qc.invalidateQueries({ queryKey: ["products"] });

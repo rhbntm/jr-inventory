@@ -4,17 +4,18 @@ import { withErrorHandler, parseBody } from "@/lib/api-wrapper";
 import { requireAuth } from "@/lib/auth";
 import { ProductRepo } from "@/app/repositories/productRepo";
 
-// GET /api/products — query: search, categoryId, page, pageSize
+// GET /api/products — query: search, categoryId, archived, showArchived, page, pageSize
 export const GET = withErrorHandler(async (req: NextRequest) => {
   await requireAuth();
   const { searchParams } = req.nextUrl;
   const search = searchParams.get("search") ?? "";
   const categoryId = searchParams.get("categoryId") ?? undefined;
   const showArchived = searchParams.get("showArchived") === "true";
+  const archived = searchParams.get("archived") === "true";
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize") ?? 20)));
 
-  const result = await ProductRepo.getProducts(search, categoryId, showArchived, page, pageSize);
+  const result = await ProductRepo.getProducts(search, categoryId, showArchived, page, pageSize, archived);
 
   return NextResponse.json(result);
 });

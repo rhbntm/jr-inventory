@@ -22,6 +22,10 @@ export const productSchema = z.object({
   categoryId: z.string().nullable().optional(),
 });
 
+export const productArchiveSchema = z.object({
+  archived: z.boolean(),
+});
+
 export const movementTypeSchema = z.enum(["IN", "OUT", "ADJUSTMENT"]);
 
 export const movementSchema = z.object({

@@ -19,6 +19,13 @@ The stockable unit. Each Variant belongs to exactly one Product and is distingui
 **Category**
 A coarse classification applied to Products (e.g., Ukay-ukay, RTW, Kids).
 
+**Archived Product**
+A Product hidden from day-to-day work (Live, stock forms and pickers, low-stock lists) with
+all its records kept. Stock it still holds stays in inventory value. It can't be archived
+while units are held for Reservations, can't take new sales, stock-ins or reservations, and
+returns to active when restored or when a Manual Batch receives stock under its name.
+Separate from a Variant's own `isArchived` flag: a Variant is hidden if either is set.
+
 ---
 
 ## Stock Lifecycle

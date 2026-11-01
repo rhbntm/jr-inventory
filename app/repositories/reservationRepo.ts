@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { ApiError } from '@/lib/errors';
+import { archivedBlockReason } from '@/lib/archive';
 import type { Prisma, ReservationState } from '@prisma/client';
 
 export class ReservationRepo {
@@ -22,7 +23,18 @@ export class ReservationRepo {
       if (!variant) {
         throw new ApiError(404, "Product variant not found");
       }
-      
+
+      // Read after taking the lock, in its own statement, so an archive that was holding
+      // the lock is seen (see ProductRepo.setArchived).
+      const archiveState = await tx.productVariant.findUniqueOrThrow({
+        where: { id: variantId },
+        select: { isArchived: true, product: { select: { isArchived: true } } },
+      });
+      const blocked = archivedBlockReason(archiveState, 'reserve');
+      if (blocked) {
+        throw new ApiError(409, blocked);
+      }
+
       const availableStock = variant.currentStock - variant.reservedStock;
       if (availableStock < quantity) {
         throw new ApiError(422, `Insufficient stock. Available: ${availableStock}, Requested: ${quantity}`);

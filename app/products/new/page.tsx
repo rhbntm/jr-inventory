@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCreateProduct, useCategories } from "@/lib/hooks";
+import { useArchivedProductByName, useCreateProduct, useCategories, useSetProductArchived } from "@/lib/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,20 @@ export default function NewProductPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+
+  const deferredName = useDeferredValue(name);
+  const { data: archivedMatch } = useArchivedProductByName(deferredName);
+  const setArchived = useSetProductArchived();
+
+  async function handleRestore(id: string, productName: string) {
+    try {
+      await setArchived.mutateAsync({ id, archived: false });
+      toast.success(`${productName} restored`);
+      router.push(`/products/${id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore product");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +85,20 @@ export default function NewProductPage() {
                 placeholder="Product name"
                 required
               />
+              {archivedMatch && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  <span>An archived product has this name. Restoring it keeps its history together.</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={setArchived.isPending}
+                    onClick={() => handleRestore(archivedMatch.id, archivedMatch.name)}
+                  >
+                    {setArchived.isPending ? "Restoring..." : "Restore it"}
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

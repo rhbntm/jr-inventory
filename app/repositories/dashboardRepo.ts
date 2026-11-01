@@ -28,6 +28,7 @@ export class DashboardRepo {
       -- We subtract reservedStock to calculate low stock based on available, physical-to-sell stock
       WHERE (v."currentStock" - v."reservedStock") <= v."lowStockAt"
         AND v."isArchived" = false
+        AND p."isArchived" = false
       ORDER BY (v."currentStock" - v."reservedStock") ASC
       LIMIT 20
     `;
@@ -37,12 +38,15 @@ export class DashboardRepo {
     const rows = await db.$queryRaw<Array<{ count: number }>>`
       SELECT COUNT(*)::int AS "count"
       FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
       WHERE (v."currentStock" - v."reservedStock") <= v."lowStockAt"
         AND v."isArchived" = false
+        AND p."isArchived" = false
     `;
     return Number(rows[0]?.count ?? 0);
   }
 
+  // Includes archived products on purpose: their stock is still money tied up.
   private static async getInventoryValuation() {
     return db.$queryRaw<
       Array<{
@@ -98,9 +102,12 @@ export class DashboardRepo {
         margin_percent: number;
       }>
     >`
-      SELECT CASE WHEN price > 0 THEN ((price - "costPrice") / price) * 100 ELSE 0 END as "margin_percent"
-      FROM "product_variants"
-      WHERE "currentStock" > 0
+      SELECT CASE WHEN v.price > 0 THEN ((v.price - v."costPrice") / v.price) * 100 ELSE 0 END as "margin_percent"
+      FROM "product_variants" v
+      JOIN "products" p ON v."productId" = p.id
+      WHERE v."currentStock" > 0
+        AND v."isArchived" = false
+        AND p."isArchived" = false
     `;
   }
 
@@ -123,6 +130,8 @@ export class DashboardRepo {
       FROM "product_variants" v
       JOIN "products" p ON v."productId" = p.id
       WHERE v."currentStock" > 0
+        AND v."isArchived" = false
+        AND p."isArchived" = false
       ORDER BY "profit" DESC
       LIMIT 5
     `;
@@ -152,6 +161,7 @@ export class DashboardRepo {
       -- i.e., current stock minus stock that is locked up in active reservations.
       WHERE (v."currentStock" - COALESCE(v."reservedStock", 0)) > 0
         AND v."isArchived" = false
+        AND p."isArchived" = false
         AND NOT EXISTS (
           SELECT 1 FROM "stock_movements" m
           WHERE m."variantId" = v.id
@@ -186,8 +196,8 @@ export class DashboardRepo {
 
   private static async getCountsAndRecentMovements(todayStart: Date) {
     return db.$transaction([
-      db.product.count(),
-      db.productVariant.count(),
+      db.product.count({ where: { isArchived: false } }),
+      db.productVariant.count({ where: { isArchived: false, product: { isArchived: false } } }),
       db.stockMovement.aggregate({
         where: { type: 'IN', voidedAt: null, createdAt: { gte: todayStart } },
         _sum: { quantity: true },

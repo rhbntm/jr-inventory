@@ -20,6 +20,7 @@ import {
 import { ArrowLeft, RotateCcw, Package, Calendar, DollarSign, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
+import { archivedRestockNotice } from "@/lib/archive";
 
 // Reprocess currently re-submits the batch's existing assignments unchanged, so it
 // only adds noise to the movement log. Hidden until there's a UI to edit assignments.
@@ -66,7 +67,7 @@ export default function BatchDetailPage() {
   const handleReprocess = async () => {
     try {
       // Re-submit the exact same data to reprocess
-      await reprocessBatch.mutateAsync({
+      const reprocessed = await reprocessBatch.mutateAsync({
         id,
         data: {
           assignments: batch.movements.map((m) => ({
@@ -79,7 +80,12 @@ export default function BatchDetailPage() {
           actualQty: batch.actualQty ?? totalAssigned,
         }
       });
-      toast.success("Batch reprocessed successfully");
+      const archivedNotice = archivedRestockNotice(reprocessed.movements);
+      if (archivedNotice) {
+        toast.warning(archivedNotice);
+      } else {
+        toast.success("Batch reprocessed successfully");
+      }
       setShowReprocessDialog(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to reprocess batch");

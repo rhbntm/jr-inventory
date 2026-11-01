@@ -125,24 +125,38 @@ export class BatchRepo {
     return db.$transaction(async (tx) => {
       let targetVariantId = variantData?.existingId;
       let priceAtMovement = 0; // will be resolved
+      // Receiving stock means it's being sold again, so an archived product comes back.
+      let restoredProductName: string | null = null;
+      const restoreIfArchived = async (product: { id: string; name: string; isArchived: boolean }) => {
+        if (!product.isArchived) return;
+        await tx.product.update({ where: { id: product.id }, data: { isArchived: false } });
+        restoredProductName = product.name;
+      };
 
       if (variantMode === 'EXISTING') {
         if (!targetVariantId) throw new ApiError(400, "Existing variant ID required");
-        const existing = await tx.productVariant.findUnique({ where: { id: targetVariantId } });
+        const existing = await tx.productVariant.findUnique({
+          where: { id: targetVariantId },
+          include: { product: true },
+        });
         if (!existing) throw new ApiError(404, "Variant not found");
-        
+
         priceAtMovement = Number(existing.price);
-        
+        await restoreIfArchived(existing.product);
+
       } else {
         // NEW VARIANT MODE
         if (!variantData?.productName) throw new ApiError(400, "Product name required for new variant");
         
-        // Find or create product
+        // Find or create product, preferring an active match over an archived namesake
         let product = await tx.product.findFirst({
-          where: { name: { equals: variantData.productName, mode: 'insensitive' } }
+          where: { name: { equals: variantData.productName, mode: 'insensitive' } },
+          orderBy: { isArchived: 'asc' },
         });
 
-        if (!product) {
+        if (product) {
+          await restoreIfArchived(product);
+        } else {
           product = await tx.product.create({
             data: {
               name: variantData.productName,
@@ -248,10 +262,11 @@ export class BatchRepo {
         });
       }
 
-      return tx.batch.findUnique({
+      const saved = await tx.batch.findUniqueOrThrow({
         where: { id: batch.id },
         include: BATCH_WITH_MOVEMENTS,
       });
+      return { ...saved, restoredProductName };
     });
   }
 

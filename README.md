@@ -164,4 +164,5 @@ See [`CONTEXT.md`](./CONTEXT.md) for the full domain glossary. Key terms:
 ## Documentation
 
 - [`CONTEXT.md`](./CONTEXT.md) — Domain glossary and architecture reference
+- [`docs/developer-guide.md`](./docs/developer-guide.md) — Running, testing and deploying the app
 - [`docs/bale-counting-guide.md`](./docs/bale-counting-guide.md) — Step-by-step operator guide for receiving a ukay/RTW bale

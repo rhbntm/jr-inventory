@@ -15,6 +15,7 @@ import {
 } from "@/lib/reservations";
 import type { ReservationWithDetails } from "@/lib/types";
 import { peso } from "@/lib/live";
+import { isVariantArchived } from "@/lib/archive";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -69,11 +70,15 @@ function ReservationRow({ reservation }: { reservation: ReservationWithDetails }
 
   const run = async (action: Action, successMessage: string) => {
     try {
-      await update.mutateAsync({
+      const updated = await update.mutateAsync({
         id: reservation.id,
         data: { action, ...(action === "return" && { restock }) },
       });
-      toast.success(successMessage);
+      if (action === "return" && restock && isVariantArchived(updated.variant)) {
+        toast.warning(`${name} returned and restocked, but ${updated.variant.product.name} is archived. Restore it to sell these.`);
+      } else {
+        toast.success(successMessage);
+      }
       setMoreOpen(false);
       setConfirming(null);
     } catch (err) {
